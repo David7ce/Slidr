@@ -10,6 +10,5 @@ export interface ToastOptions {
  */
 export function toast({ title, description, variant = "default" }: ToastOptions) {
   // In development we print to console; a real UI toast can hook into a context provider.
-  // eslint-disable-next-line no-console
   console.log(`[Toast] ${variant.toUpperCase()}: ${title} – ${description}`);
 }

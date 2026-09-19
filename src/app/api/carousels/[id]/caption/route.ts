@@ -23,10 +23,7 @@ export async function PUT(
   const { id } = await params;
   try {
     const body = await request.json();
-    const { caption, hashtags } = body as {
-      caption?: string;
-      hashtags?: string[];
-    };
+    const { caption, hashtags } = body as { caption?: string; hashtags?: string[] };
 
     const updated = await updateCarousel(id, { caption, hashtags });
     if (!updated) {

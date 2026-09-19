@@ -2,16 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Layers, Calendar, SlidersHorizontal, Trash2, Copy, Zap } from "lucide-react";
+import { Plus, Layers, Trash2, Copy } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CreateCarouselDialog } from "@/components/ui/create-carousel-dialog";
-import { CreateFromSourceDialog } from "@/components/ui/create-from-source-dialog";
 import { BrandSetup } from "@/components/brand/BrandSetup";
-import { SlideRenderer } from "@/components/editor/SlideRenderer";
-import { TemplateGallery } from "@/components/templates/TemplateGallery";
 import type { Carousel } from "@/types/carousel";
 import type { BrandConfig } from "@/types/brand";
 
@@ -20,23 +17,7 @@ export default function DashboardPage() {
   const [carousels, setCarousels] = useState<Carousel[]>([]);
   const [loading, setLoading] = useState(true);
   const [showBrandSetup, setShowBrandSetup] = useState(false);
-  const [brand, setBrand] = useState<BrandConfig | null>(null);
-
-  useEffect(() => {
-    Promise.all([
-      fetch("/api/carousels").then((r) => r.json()),
-      fetch("/api/brand").then((r) => r.json()),
-    ])
-      .then(([carouselData, brandData]) => {
-        setCarousels(carouselData.carousels || []);
-        setBrand(brandData);
-        if (!brandData.name || brandData.name.trim() === "") {
-          setShowBrandSetup(true);
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
 
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
@@ -44,6 +25,32 @@ export default function DashboardPage() {
     description: string;
     onConfirm: () => void;
   }>({ open: false, title: "", description: "", onConfirm: () => {} });
+
+  const load = useCallback(async () => {
+    try {
+      const [carouselRes, brandRes] = await Promise.all([
+        fetch("/api/carousels").then((r) => r.json()),
+        fetch("/api/brand").then((r) => r.json()),
+      ]);
+      setCarousels(carouselRes.carousels || []);
+      const brand = brandRes as BrandConfig;
+      if (!brand.name || brand.name.trim() === "") {
+        setShowBrandSetup(true);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Fetch once on mount. `load` sets state after `await`, so this cannot
+  // cascade synchronously; the rule cannot see through the async boundary.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleDelete = useCallback((e: React.MouseEvent, id: string, name: string) => {
     e.stopPropagation();
@@ -53,38 +60,40 @@ export default function DashboardPage() {
       description: "This will permanently delete the carousel and all its slides.",
       onConfirm: async () => {
         const res = await fetch(`/api/carousels/${id}`, { method: "DELETE" });
-        if (res.ok) {
-          setCarousels((prev) => prev.filter((c) => c.id !== id));
-        }
+        if (res.ok) setCarousels((prev) => prev.filter((c) => c.id !== id));
       },
     });
   }, []);
 
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
-  const [showCreateFromSourceDialog, setShowCreateFromSourceDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState<"carousels" | "templates">("carousels");
+  const handleDuplicate = useCallback(
+    async (e: React.MouseEvent, id: string) => {
+      e.stopPropagation();
+      const res = await fetch(`/api/carousels/${id}/duplicate`, { method: "POST" });
+      if (res.ok) await load();
+    },
+    [load]
+  );
 
-  const handleCreate = useCallback(async (name: string, aspectRatio: string) => {
-    try {
-      const res = await fetch("/api/carousels", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          aspectRatio,
-        }),
-      });
-      if (res.ok) {
-        const carousel = await res.json();
-        router.push(`/carousel/${carousel.id}`);
-      } else {
-        alert("Failed to create carousel. Please try again.");
+  const handleCreate = useCallback(
+    async (name: string, aspectRatio: string) => {
+      try {
+        const res = await fetch("/api/carousels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, aspectRatio }),
+        });
+        if (res.ok) {
+          const carousel = await res.json();
+          router.push(`/carousel/${carousel.id}`);
+        } else {
+          alert("Failed to create carousel. Please try again.");
+        }
+      } catch {
+        alert("Network error: Could not connect to the server.");
       }
-    } catch (err) {
-      console.error(err);
-      alert("Network error: Could not connect to the server.");
-    }
-  }, [router]);
+    },
+    [router]
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -106,158 +115,91 @@ export default function DashboardPage() {
         onCreate={handleCreate}
       />
 
-      <CreateFromSourceDialog
-        open={showCreateFromSourceDialog}
-        onOpenChange={setShowCreateFromSourceDialog}
-        onSuccess={(id) => router.push(`/carousel/${id}`)}
-      />
-
       <BrandSetup
         open={showBrandSetup}
         onComplete={() => {
           setShowBrandSetup(false);
-          fetch("/api/brand")
-            .then((r) => r.json())
-            .then((data) => setBrand(data))
-            .catch(() => {});
+          load();
         }}
-        initialBrand={brand || undefined}
       />
 
-      <main className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto">
         <div className="max-w-5xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-2xl font-bold">Slidr by Uitbreiden</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                Create LinkedIn, Instagram & TikTok carousels with AI
+              <h1 className="text-xl font-bold">Carousels</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                AI writes the content. Templates handle the design.
               </p>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={() => setShowCreateFromSourceDialog(true)} variant="outline">
-                <Zap className="h-4 w-4 mr-1 text-accent" />
-                Generate from Source
-              </Button>
-              <Button onClick={() => setShowCreateDialog(true)} variant="accent">
-                <Plus className="h-4 w-4 mr-1" />
-                New Carousel
-              </Button>
-            </div>
+            <Button variant="accent" size="sm" onClick={() => setShowCreateDialog(true)}>
+              <Plus className="h-4 w-4 mr-1.5" />
+              New carousel
+            </Button>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-1 mb-6 border-b border-border">
-            <button
-              onClick={() => setActiveTab("carousels")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === "carousels"
-                  ? "border-accent text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              My Carousels
-            </button>
-            <button
-              onClick={() => setActiveTab("templates")}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === "templates"
-                  ? "border-accent text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Templates
-            </button>
-          </div>
-
-          {activeTab === "templates" ? (
-            <TemplateGallery />
-          ) : loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-48 rounded-xl bg-muted animate-pulse"
-                />
-              ))}
+          {loading ? (
+            <div className="flex items-center justify-center py-20">
+              <div className="h-6 w-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
             </div>
           ) : carousels.length === 0 ? (
-            <div className="text-center py-20">
-              <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h2 className="text-lg font-semibold mb-2">
-                No carousels yet
-              </h2>
-              <p className="text-sm text-muted-foreground mb-6 max-w-md mx-auto">
-                Create your first carousel for LinkedIn, Instagram, or TikTok.
-                Our AI assistant will help you design beautiful slides in seconds.
+            <div className="text-center py-20 border-2 border-dashed border-border rounded-xl">
+              <Layers className="h-10 w-10 text-muted-foreground/40 mx-auto mb-3" />
+              <p className="text-sm font-medium">No carousels yet</p>
+              <p className="text-xs text-muted-foreground mt-1 mb-4">
+                Create one and describe what you want to make.
               </p>
-              <Button onClick={() => setShowCreateDialog(true)} variant="accent" size="lg">
-                <Plus className="h-5 w-5" />
-                Create Your First Carousel
+              <Button variant="accent" size="sm" onClick={() => setShowCreateDialog(true)}>
+                <Plus className="h-4 w-4 mr-1.5" />
+                New carousel
               </Button>
             </div>
           ) : (
-            <div className="oc-stagger grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {carousels.map((carousel) => (
                 <div
                   key={carousel.id}
                   onClick={() => router.push(`/carousel/${carousel.id}`)}
-                  className="relative text-left rounded-xl border border-border bg-surface hover:border-accent/50 hover:shadow-md hover:-translate-y-0.5 p-4 group cursor-pointer transition-[translate,border-color,box-shadow] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]"
+                  className="group relative rounded-xl border border-border bg-surface p-4 cursor-pointer hover:border-accent/50 transition-colors"
                 >
-                  {/* Card actions */}
-                  <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    <button
-                      onClick={async (e) => {
-                        e.stopPropagation();
-                        const res = await fetch(`/api/carousels/${carousel.id}/duplicate`, { method: "POST" });
-                        if (res.ok) {
-                          const dup = await res.json();
-                          setCarousels((prev) => [dup, ...prev]);
-                        }
-                      }}
-                      className="h-7 w-7 rounded-lg flex items-center justify-center bg-white border border-border hover:bg-muted"
-                      aria-label={`Duplicate ${carousel.name}`}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </button>
-                    <button
-                      onClick={(e) => handleDelete(e, carousel.id, carousel.name)}
-                      className="h-7 w-7 rounded-lg flex items-center justify-center bg-white border border-border hover:bg-destructive hover:text-white hover:border-destructive"
-                      aria-label={`Delete ${carousel.name}`}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </button>
+                  <div className="flex items-start justify-between gap-2">
+                    <h3 className="font-semibold text-sm truncate">{carousel.name}</h3>
+                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                      <button
+                        onClick={(e) => handleDuplicate(e, carousel.id)}
+                        className="text-muted-foreground hover:text-foreground"
+                        aria-label="Duplicate"
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDelete(e, carousel.id, carousel.name)}
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label="Delete"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="h-28 rounded-lg bg-muted mb-3 flex items-center justify-center overflow-hidden">
-                    {carousel.slides.length > 0 ? (
-                      <SlideRenderer
-                        html={carousel.slides[0].html}
-                        aspectRatio={carousel.aspectRatio}
-                        className="w-full h-full"
-                      />
-                    ) : (
-                      <Layers className="h-8 w-8 text-muted-foreground/30" />
-                    )}
-                  </div>
-                  <h3 className="font-semibold text-sm group-hover:text-accent transition-colors truncate">
-                    {carousel.name}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
-                    <Badge variant="secondary" className="text-[10px]">
-                      <SlidersHorizontal className="h-2.5 w-2.5 mr-1" />
-                      {carousel.aspectRatio}
-                    </Badge>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {new Date(carousel.updatedAt).toLocaleDateString()}
+                  <div className="flex items-center gap-2 mt-3">
+                    <Badge variant="secondary">{carousel.aspectRatio}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {carousel.slides.length} slide{carousel.slides.length === 1 ? "" : "s"}
                     </span>
                   </div>
+
+                  {carousel.themeId && (
+                    <p className="text-[11px] text-muted-foreground mt-2 truncate">
+                      Theme: {carousel.themeId}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
-      </main>
+      </div>
     </div>
   );
 }

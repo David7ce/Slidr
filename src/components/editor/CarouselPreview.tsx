@@ -5,20 +5,22 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SlideRenderer } from "./SlideRenderer";
 import { SafeZoneOverlay } from "./SafeZoneOverlay";
-import type { Slide, AspectRatio } from "@/types/carousel";
-import type { BrandConfig } from "@/types/brand";
+import type { Slide, AspectRatio, SlideBrand } from "@/types/carousel";
+import type { Theme } from "@/types/theme";
 
 interface CarouselPreviewProps {
   slides: Slide[];
+  theme: Theme;
   aspectRatio: AspectRatio;
   activeIndex: number;
   onActiveChange: (index: number) => void;
   showSafeZones?: boolean;
-  brand?: BrandConfig;
+  brand?: SlideBrand;
 }
 
 export function CarouselPreview({
   slides,
+  theme,
   aspectRatio,
   activeIndex,
   onActiveChange,
@@ -52,9 +54,7 @@ export function CarouselPreview({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 min-w-0 bg-muted">
-      {/* Preview area with padding for arrows */}
       <div className="flex-1 relative min-h-0 p-8 px-14">
-        {/* Left arrow */}
         <Button
           variant="ghost"
           size="icon"
@@ -66,22 +66,23 @@ export function CarouselPreview({
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        {/* Slide fills the padded inner area */}
         <div
           key={slide.id}
           className="oc-slide-in relative w-full h-full"
           style={{ "--oc-slide-from": `${direction}px` } as CSSProperties}
         >
           <SlideRenderer
-            html={slide.html}
+            slide={slide}
+            theme={theme}
             aspectRatio={aspectRatio}
-            style={{ width: "100%", height: "100%" }}
+            index={activeIndex + 1}
+            total={slides.length}
             brand={brand}
+            style={{ width: "100%", height: "100%" }}
           />
           <SafeZoneOverlay aspectRatio={aspectRatio} visible={showSafeZones} />
         </div>
 
-        {/* Right arrow */}
         <Button
           variant="ghost"
           size="icon"
@@ -94,7 +95,6 @@ export function CarouselPreview({
         </Button>
       </div>
 
-      {/* Slide counter dots */}
       {slides.length > 1 && (
         <div className="flex items-center justify-center gap-1.5 pb-3 shrink-0">
           {slides.map((_, i) => (

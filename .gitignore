@@ -27,6 +27,7 @@
 # app data (user-generated)
 /data/
 /public/uploads/
+/projects/
 
 # debug
 npm-debug.log*

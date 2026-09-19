@@ -5,23 +5,25 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { X, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SlideRenderer } from "./SlideRenderer";
-import type { Slide, AspectRatio } from "@/types/carousel";
-import type { BrandConfig } from "@/types/brand";
+import type { Slide, AspectRatio, SlideBrand } from "@/types/carousel";
+import type { Theme } from "@/types/theme";
 
 interface FullscreenPreviewProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   slides: Slide[];
+  theme: Theme;
   aspectRatio: AspectRatio;
   activeIndex: number;
   onActiveChange: (index: number) => void;
-  brand?: BrandConfig;
+  brand?: SlideBrand;
 }
 
 export function FullscreenPreview({
   open,
   onOpenChange,
   slides,
+  theme,
   aspectRatio,
   activeIndex,
   onActiveChange,
@@ -50,7 +52,10 @@ export function FullscreenPreview({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay data-oc-overlay className="fixed inset-0 z-50 bg-black/90" />
-        <Dialog.Content data-oc-fade-scale className="fixed inset-0 z-50 flex items-center justify-center p-8">
+        <Dialog.Content
+          data-oc-fade-scale
+          className="fixed inset-0 z-50 flex items-center justify-center p-8"
+        >
           <Dialog.Close asChild>
             <button
               className="absolute top-4 right-4 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors z-10"
@@ -60,7 +65,6 @@ export function FullscreenPreview({
             </button>
           </Dialog.Close>
 
-          {/* Prev */}
           <Button
             variant="ghost"
             size="icon"
@@ -72,17 +76,18 @@ export function FullscreenPreview({
             <ChevronLeft className="h-6 w-6" />
           </Button>
 
-          {/* Slide */}
           {slide && (
             <SlideRenderer
-              html={slide.html}
+              slide={slide}
+              theme={theme}
               aspectRatio={aspectRatio}
-              style={{ width: "100%", height: "100%", maxWidth: 800 }}
+              index={activeIndex + 1}
+              total={slides.length}
               brand={brand}
+              style={{ width: "100%", height: "100%", maxWidth: 800 }}
             />
           )}
 
-          {/* Next */}
           <Button
             variant="ghost"
             size="icon"
@@ -94,16 +99,13 @@ export function FullscreenPreview({
             <ChevronRight className="h-6 w-6" />
           </Button>
 
-          {/* Counter */}
           <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-2">
             {slides.map((_, i) => (
               <button
                 key={i}
                 onClick={() => onActiveChange(i)}
                 className={`h-2 rounded-full transition-all ${
-                  i === activeIndex
-                    ? "w-8 bg-white"
-                    : "w-2 bg-white/30 hover:bg-white/50"
+                  i === activeIndex ? "w-8 bg-white" : "w-2 bg-white/30 hover:bg-white/50"
                 }`}
                 aria-label={`Go to slide ${i + 1}`}
               />

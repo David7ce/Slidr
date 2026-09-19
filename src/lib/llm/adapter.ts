@@ -1,13 +1,19 @@
 import { readDataSafe, writeData } from "@/lib/data";
-import type { LlmConfig, LlmMessage, LlmTool, LlmStreamEvent, CliInfo } from "./types";
+import type { LlmConfig, LlmMessage, LlmTool, LlmStreamEvent } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { HttpClient } from "./http-client";
-import { detectPreferredCli, detectCliByType } from "./cli-detector";
-import { spawnCli } from "./cli-spawner";
-import { spawnAntigravity } from "@/lib/antigravity";
 import { SLIDE_TOOLS } from "./tools";
-import { addSlide, updateSlide, deleteSlide, updateCarousel } from "@/lib/carousels";
-import OpenAI from "openai";
+import {
+  addSlide,
+  updateSlide,
+  deleteSlide,
+  reorderSlides,
+  updateCarousel,
+  getCarousel,
+} from "@/lib/carousels";
+import { validateSlideContent } from "@/lib/slides/schema";
+import { ALL_ASPECT_RATIOS, type AspectRatio } from "@/types/carousel";
+import { listThemeIds } from "@/lib/themes";
 
 const CONFIG_FILE = "llm-config.json";
 
@@ -23,57 +29,129 @@ export function getTools(): LlmTool[] {
   return SLIDE_TOOLS;
 }
 
+export interface ToolResult {
+  success: boolean;
+  message: string;
+  data?: unknown;
+}
+
 /**
- * Execute a tool call server-side (HTTP mode).
- * In CLI mode, the CLI handles this via curl to the API routes directly.
+ * Execute a tool call server-side.
+ *
+ * Every slide payload is validated against the zod schema before it reaches
+ * storage. Invalid model output is rejected with a corrective message that is
+ * fed back to the model, so it can retry rather than corrupt the carousel.
  */
 export async function executeToolCall(
   carouselId: string,
   name: string,
   args: Record<string, unknown>
-): Promise<{ success: boolean; message: string; data?: unknown }> {
+): Promise<ToolResult> {
   try {
     switch (name) {
-      case "create_slide": {
-        const html = args.html as string;
-        const notes = (args.notes as string) || "";
-        if (!html || typeof html !== "string") {
-          return { success: false, message: "Missing required 'html' parameter" };
+      case "set_carousel": {
+        const updates: Record<string, unknown> = {};
+        if (typeof args.title === "string" && args.title.trim()) {
+          updates.name = args.title.trim().slice(0, 120);
         }
-        const slide = await addSlide(carouselId, html, notes);
-        if (!slide) return { success: false, message: "Failed to create slide (carousel full or not found)" };
-        return { success: true, message: `Created slide ${slide.id}`, data: slide };
+        if (typeof args.size === "string" && ALL_ASPECT_RATIOS.includes(args.size as AspectRatio)) {
+          updates.aspectRatio = args.size as AspectRatio;
+        }
+        if (typeof args.theme === "string" && args.theme.trim()) {
+          const ids = await listThemeIds();
+          if (!ids.includes(args.theme.trim())) {
+            return {
+              success: false,
+              message: `Unknown theme "${args.theme}". Available: ${ids.join(", ")}`,
+            };
+          }
+          updates.themeId = args.theme.trim();
+        }
+        if (Object.keys(updates).length === 0) {
+          return { success: false, message: "No valid fields provided." };
+        }
+        const updated = await updateCarousel(carouselId, updates);
+        if (!updated) return { success: false, message: "Carousel not found." };
+        return { success: true, message: "Carousel metadata updated.", data: updates };
       }
+
+      case "add_slide": {
+        const { notes, ...content } = args;
+        const parsed = validateSlideContent(content);
+        if (!parsed.ok) {
+          return { success: false, message: `Invalid slide content — ${parsed.error}` };
+        }
+        const slide = await addSlide(
+          carouselId,
+          parsed.data,
+          typeof notes === "string" ? notes : ""
+        );
+        if (!slide) {
+          return { success: false, message: "Failed to add slide (carousel not found or slide limit reached)." };
+        }
+        return { success: true, message: `Added ${slide.type} slide ${slide.id}.`, data: slide };
+      }
+
       case "update_slide": {
         const slideId = args.slideId as string;
-        const html = args.html as string;
-        if (!slideId || !html) {
-          return { success: false, message: "Missing slideId or html" };
+        if (!slideId) return { success: false, message: "Missing slideId." };
+        const { slideId: _ignored, notes, ...content } = args;
+        void _ignored;
+        void notes;
+        const parsed = validateSlideContent(content);
+        if (!parsed.ok) {
+          return { success: false, message: `Invalid slide content — ${parsed.error}` };
         }
-        await updateSlide(carouselId, slideId, { html });
-        return { success: true, message: `Updated slide ${slideId}` };
+        const slide = await updateSlide(carouselId, slideId, parsed.data);
+        if (!slide) return { success: false, message: `Slide ${slideId} not found.` };
+        return { success: true, message: `Updated slide ${slideId}.`, data: slide };
       }
+
       case "delete_slide": {
         const slideId = args.slideId as string;
-        if (!slideId) {
-          return { success: false, message: "Missing slideId" };
-        }
-        await deleteSlide(carouselId, slideId);
-        return { success: true, message: `Deleted slide ${slideId}` };
+        if (!slideId) return { success: false, message: "Missing slideId." };
+        const ok = await deleteSlide(carouselId, slideId);
+        return ok
+          ? { success: true, message: `Deleted slide ${slideId}.` }
+          : { success: false, message: `Slide ${slideId} not found.` };
       }
+
+      case "reorder_slides": {
+        const slideIds = args.slideIds as string[];
+        if (!Array.isArray(slideIds) || slideIds.length === 0) {
+          return { success: false, message: "slideIds must be a non-empty array." };
+        }
+        const carousel = await getCarousel(carouselId);
+        if (!carousel) return { success: false, message: "Carousel not found." };
+        const known = new Set(carousel.slides.map((s) => s.id));
+        const unknown = slideIds.filter((id) => !known.has(id));
+        if (unknown.length > 0) {
+          return { success: false, message: `Unknown slide ids: ${unknown.join(", ")}` };
+        }
+        const ok = await reorderSlides(carouselId, slideIds);
+        return ok
+          ? { success: true, message: "Slides reordered." }
+          : { success: false, message: "Reorder failed." };
+      }
+
       case "set_caption": {
         const caption = args.caption as string;
-        const hashtags = (args.hashtags as string[]) || [];
+        if (!caption || typeof caption !== "string") {
+          return { success: false, message: "Missing caption." };
+        }
+        const hashtags = Array.isArray(args.hashtags)
+          ? (args.hashtags as string[]).map((h) => String(h).replace(/^#/, "").trim()).filter(Boolean)
+          : [];
         await updateCarousel(carouselId, { caption, hashtags });
-        return { success: true, message: "Caption saved" };
+        return { success: true, message: "Caption saved." };
       }
+
       case "fetch_url": {
         const url = args.url as string;
-        if (!url) return { success: false, message: "Missing url" };
+        if (!url) return { success: false, message: "Missing url." };
         try {
           const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
           const text = await resp.text();
-          // Strip HTML tags for a clean summary
           const clean = text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
           return {
             success: true,
@@ -84,37 +162,7 @@ export async function executeToolCall(
           return { success: false, message: `Fetch failed: ${(err as Error).message}` };
         }
       }
-      case "generate_image": {
-        const prompt = args.prompt as string;
-        if (!prompt) return { success: false, message: "Missing prompt" };
-        try {
-          const config = await getLlmConfig();
-          if (!config.apiKey) {
-            return { success: false, message: "Image generation requires an API key in settings." };
-          }
-          const openai = new OpenAI({
-            apiKey: config.apiKey,
-            baseURL: config.baseURL || "https://api.openai.com/v1",
-          });
-          const response = await openai.images.generate({
-            model: "dall-e-3",
-            prompt,
-            n: 1,
-            size: "1024x1024",
-            response_format: "url",
-          });
-          const url = response.data?.[0]?.url;
-          if (!url) throw new Error("No image generated.");
-          
-          return {
-            success: true,
-            message: `Generated image for prompt: ${prompt}`,
-            data: { url },
-          };
-        } catch (err) {
-          return { success: false, message: `Image generation failed: ${(err as Error).message}` };
-        }
-      }
+
       default:
         return { success: false, message: `Unknown tool: ${name}` };
     }
@@ -124,8 +172,9 @@ export async function executeToolCall(
 }
 
 /**
- * Generate a chat response using the configured LLM.
- * Routes to HTTP mode or CLI mode based on config.
+ * Generate a chat response using the configured LLM (HTTP mode).
+ * Streams tokens, executes tool calls, and continues until the model stops
+ * requesting tools.
  */
 export async function generateStream(
   carouselId: string,
@@ -134,72 +183,24 @@ export async function generateStream(
   config: LlmConfig,
   onEvent: (event: LlmStreamEvent) => void
 ): Promise<void> {
+  if (!config.baseURL || !config.apiKey || !config.model) {
+    onEvent({
+      type: "error",
+      error: "No LLM configured. Set a base URL, API key, and model in settings.",
+    });
+    return;
+  }
+
   const messages: LlmMessage[] = [
     { role: "system", content: systemPrompt },
     { role: "user", content: userMessage },
   ];
 
-  // Determine effective mode
-  let effectiveMode = config.mode;
-  let cliInfo: CliInfo | null = null;
-
-  if (effectiveMode === "auto") {
-    if (config.cli) {
-      cliInfo = detectCliByType(config.cli);
-    }
-    if (!cliInfo) {
-      cliInfo = detectPreferredCli();
-    }
-    // Use CLI if detected AND no HTTP config is set; use HTTP if baseURL+key are configured
-    if (config.baseURL && config.apiKey && config.model) {
-      effectiveMode = "http";
-    } else if (cliInfo) {
-      effectiveMode = "cli";
-    } else if (config.baseURL && config.apiKey && config.model) {
-      effectiveMode = "http";
-    } else {
-      onEvent({ type: "error", error: "No LLM configured. Set a base URL + API key in settings, or install a coding CLI (Antigravity recommended)." });
-      return;
-    }
-  } else if (effectiveMode === "cli") {
-    if (config.cli) {
-      cliInfo = detectCliByType(config.cli);
-    }
-    if (!cliInfo) {
-      cliInfo = detectPreferredCli();
-    }
-    if (!cliInfo) {
-      onEvent({ type: "error", error: "No coding CLI detected. Install Antigravity (recommended) or switch to HTTP mode with a base URL + API key." });
-      return;
-    }
-  } else {
-    // http mode
-    if (!config.baseURL || !config.apiKey || !config.model) {
-      onEvent({ type: "error", error: "HTTP mode requires base URL, API key, and model. Configure in settings." });
-      return;
-    }
-  }
-
-  if (effectiveMode === "http") {
-    await generateHttp(config, messages, carouselId, onEvent);
-  } else if (cliInfo) {
-    await generateCli(cliInfo, userMessage, systemPrompt, onEvent);
-  }
-}
-
-async function generateHttp(
-  config: LlmConfig,
-  messages: LlmMessage[],
-  carouselId: string,
-  onEvent: (event: LlmStreamEvent) => void
-): Promise<void> {
   try {
     const client = new HttpClient(config);
     const tools = getTools();
-
-    // Multi-turn: stream, execute tool calls, continue
     const currentMessages = [...messages];
-    const MAX_TOOL_ROUNDS = 15;
+    const MAX_TOOL_ROUNDS = 20;
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
       let hadToolCalls = false;
@@ -209,14 +210,12 @@ async function generateHttp(
           onEvent(event);
         } else if (event.type === "tool_call" && event.toolCall) {
           hadToolCalls = true;
-          // Execute the tool server-side
           const result = await executeToolCall(
             carouselId,
             event.toolCall.name,
             event.toolCall.arguments
           );
 
-          // Notify the UI that a slide was created/updated
           onEvent({
             type: "tool_call",
             toolCall: {
@@ -226,10 +225,9 @@ async function generateHttp(
             },
           });
 
-          // Add assistant message + tool result to conversation for next round
           currentMessages.push({
             role: "assistant",
-            content: "", // In OpenAI streaming, tool calls come as deltas
+            content: "",
             tool_call_id: event.toolCall.id,
           });
           currentMessages.push({
@@ -237,8 +235,6 @@ async function generateHttp(
             content: JSON.stringify(result),
             tool_call_id: event.toolCall.id,
           });
-        } else if (event.type === "result") {
-          // Stream complete for this round
         }
       }
 
@@ -247,65 +243,9 @@ async function generateHttp(
 
     onEvent({ type: "result" });
   } catch (err) {
-    onEvent({ type: "error", error: `HTTP LLM error: ${(err as Error).message}` });
+    onEvent({ type: "error", error: `LLM error: ${(err as Error).message}` });
   }
 }
 
-async function generateCli(
-  cliInfo: CliInfo,
-  userMessage: string,
-  systemPrompt: string,
-  onEvent: (event: LlmStreamEvent) => void
-): Promise<void> {
-  return new Promise((resolve) => {
-    let resolved = false;
-    const finish = () => {
-      if (!resolved) {
-        resolved = true;
-        resolve();
-      }
-    };
-
-    if (cliInfo.type === "antigravity") {
-      spawnAntigravity(
-        cliInfo.path,
-        userMessage,
-        systemPrompt,
-        process.cwd(),
-        (event) => onEvent(event),
-        (err) => {
-          onEvent({ type: "error", error: err.message });
-          finish();
-        },
-        () => {
-          onEvent({ type: "result" });
-          finish();
-        }
-      );
-    } else {
-      spawnCli(
-        {
-          cliPath: cliInfo.path,
-          cliType: cliInfo.type,
-          message: userMessage,
-          systemPrompt,
-          cwd: process.cwd(),
-        },
-        (event) => onEvent(event),
-        (err) => {
-          onEvent({ type: "error", error: err.message });
-          finish();
-        },
-        () => {
-          onEvent({ type: "result" });
-          finish();
-        }
-      );
-    }
-  });
-}
-
-// Re-export for convenience
-export { detectPreferredCli, detectClis } from "./cli-detector";
 export { PROVIDER_PRESETS, DEFAULT_CONFIG } from "./types";
-export type { LlmConfig, LlmMode, CliInfo, CliType, LlmStreamEvent } from "./types";
+export type { LlmConfig, LlmMode, LlmStreamEvent } from "./types";

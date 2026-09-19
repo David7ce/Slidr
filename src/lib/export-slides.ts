@@ -3,14 +3,15 @@ import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import path from "path";
 import sharp from "sharp";
-import { PDFDocument } from "pdf-lib";
-import { wrapSlideHtml, extractFontFamilies } from "./slide-html";
+import { wrapSlideHtml } from "./slide-html";
 import { getInlinedFontCSS } from "./fonts";
-import { injectWatermarkIntoPage } from "./watermark";
-import { isLicensed } from "./license";
-import { getBrand } from "./brand";
-import type { Slide, AspectRatio } from "@/types/carousel";
-import { DIMENSIONS, getExportFormat } from "@/types/carousel";
+import { renderSlide, themeFontFamilies } from "./render";
+import { getTheme } from "./themes";
+import type { Slide, AspectRatio, SlideBrand } from "@/types/carousel";
+import { DIMENSIONS } from "@/types/carousel";
+import type { Theme } from "@/types/theme";
+
+export type ExportFormat = "png" | "jpg";
 
 // Singleton browser with lifecycle management
 let browser: Browser | null = null;
@@ -22,17 +23,13 @@ const MAX_EXPORTS_BEFORE_RESTART = 50;
  * Prefers Puppeteer's bundled download, falls back to system Chrome/Chromium.
  */
 function getChromeExecutablePath(): string | undefined {
-  // Check common system Chrome locations (macOS, Linux, Windows)
   const candidates = [
-    // macOS
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    // Linux
     "/usr/bin/google-chrome",
     "/usr/bin/google-chrome-stable",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
-    // Windows
     "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
   ];
@@ -45,7 +42,6 @@ function getChromeExecutablePath(): string | undefined {
     }
   }
 
-  // Let Puppeteer use its own bundled download if no system Chrome found
   return undefined;
 }
 
@@ -56,7 +52,6 @@ async function getBrowser(): Promise<Browser> {
     exportCount = 0;
   }
   if (!browser || !browser.isConnected()) {
-    // Prefer system Chrome if Puppeteer's bundled download is missing/corrupt
     const executablePath = getChromeExecutablePath();
     browser = await puppeteer.launch({
       headless: true,
@@ -69,31 +64,44 @@ async function getBrowser(): Promise<Browser> {
 }
 
 /**
- * Inline all image references in slide HTML.
- * Replaces /uploads/xxx.png paths with data: URIs.
+ * Inline all image references in slide HTML as data: URIs.
+ *
+ * Sources are project assets (`/api/projects/<id>/assets/<name>`). Inlining
+ * removes any dependency on the dev server being reachable while Puppeteer
+ * renders, which keeps exports self-contained and fast.
  */
 async function inlineImages(html: string): Promise<string> {
-  const uploadDir = path.resolve(process.cwd(), "public");
-  const imgRegex = /(?:src=["']|url\(["']?)(\/uploads\/[^"'\s)]+)/g;
+  const projectDir = path.join(/* turbopackIgnore: true */ process.cwd(), "projects");
+  const imgRegex = /(?:src=["']|url\(["']?)(\/api\/projects\/[^"'\s)]+)/g;
   const matches = [...html.matchAll(imgRegex)];
 
   let result = html;
   for (const match of matches) {
-    const imgPath = match[1];
+    const assetPath = match[1];
     try {
-      const fullPath = path.join(uploadDir, imgPath);
+      // /api/projects/<id>/assets/<name>
+      const parts = assetPath.split("/").filter(Boolean);
+      const name = parts[parts.length - 1];
+      const projectId = parts[parts.indexOf("projects") + 1];
+      if (!name || !projectId) continue;
+
+      const fullPath = path.join(projectDir, projectId, "assets", path.basename(name));
       const buffer = await readFile(fullPath);
-      const ext = path.extname(imgPath).toLowerCase();
+      const ext = path.extname(name).toLowerCase();
       const mime =
         ext === ".png"
           ? "image/png"
           : ext === ".jpg" || ext === ".jpeg"
             ? "image/jpeg"
-            : "image/webp";
-      const base64 = buffer.toString("base64");
-      result = result.replace(imgPath, `data:${mime};base64,${base64}`);
+            : ext === ".webp"
+              ? "image/webp"
+              : "application/octet-stream";
+      result = result.replace(
+        assetPath,
+        `data:${mime};base64,${buffer.toString("base64")}`
+      );
     } catch {
-      // Keep original path — Puppeteer can fetch from localhost
+      // Asset missing — leave the URL so the render still succeeds.
     }
   }
 
@@ -101,33 +109,31 @@ async function inlineImages(html: string): Promise<string> {
 }
 
 /**
- * Export a single slide to PNG buffer.
- * Composites the watermark overlay if the user is not licensed.
+ * Export a single structured slide to an image buffer.
+ * The slide is rendered deterministically from its content + the theme.
  */
 export async function exportSlide(
   slide: Slide,
-  aspectRatio: AspectRatio
+  theme: Theme,
+  aspectRatio: AspectRatio,
+  opts: { index: number; total: number; brand?: SlideBrand; format?: ExportFormat }
 ): Promise<Buffer> {
   const { width, height } = DIMENSIONS[aspectRatio];
+  const format = opts.format ?? "png";
 
-  // Get inlined font CSS
-  const fontFamilies = extractFontFamilies(slide.html);
-  const inlinedFontCss = await getInlinedFontCSS(fontFamilies);
-
-  // Inline images
-  const inlinedHtml = await inlineImages(slide.html);
-
-  // Fetch brand for author badge
-  const brand = await getBrand();
-
-  // Build self-contained HTML
-  const fullHtml = wrapSlideHtml(inlinedHtml, aspectRatio, {
-    inlineFontCss: inlinedFontCss,
-    brand,
+  const bodyHtml = renderSlide(slide, theme, aspectRatio, {
+    index: opts.index,
+    total: opts.total,
+    brand: opts.brand,
   });
 
-  // Check license
-  const licensed = await isLicensed();
+  const inlinedFontCss = await getInlinedFontCSS(themeFontFamilies(theme));
+  const inlinedHtml = await inlineImages(bodyHtml);
+
+  const fullHtml = wrapSlideHtml(inlinedHtml, aspectRatio, {
+    inlineFontCss: inlinedFontCss,
+    fontFamilies: themeFontFamilies(theme),
+  });
 
   const br = await getBrowser();
   const page = await br.newPage();
@@ -136,7 +142,6 @@ export async function exportSlide(
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
     await page.setContent(fullHtml, { waitUntil: "domcontentloaded", timeout: 15000 });
 
-    // Wait for fonts to be ready
     await page
       .waitForFunction(
         () =>
@@ -149,9 +154,6 @@ export async function exportSlide(
         // Font loading timeout — proceed with whatever loaded
       });
 
-    // Inject watermark if not licensed
-    await injectWatermarkIntoPage(page, licensed);
-
     const screenshotBuffer = await page.screenshot({
       type: "png",
       clip: { x: 0, y: 0, width, height },
@@ -159,27 +161,31 @@ export async function exportSlide(
 
     exportCount++;
 
-    // Post-process with Sharp: enforce sRGB
-    const processed = await sharp(screenshotBuffer)
-      .toColorspace("srgb")
-      .png()
-      .toBuffer();
-
-    return processed;
+    const pipeline = sharp(screenshotBuffer).toColorspace("srgb");
+    return format === "jpg"
+      ? pipeline.jpeg({ quality: 92 }).toBuffer()
+      : pipeline.png().toBuffer();
   } finally {
     await page.close().catch(() => {});
   }
 }
 
 /**
- * Export all slides of a carousel to PNG buffers.
+ * Export all slides of a carousel to image buffers.
  * Processes up to 3 slides concurrently.
  */
 export async function exportAllSlides(
   slides: Slide[],
+  theme: Theme,
   aspectRatio: AspectRatio,
-  onProgress?: (current: number, total: number) => void
+  opts?: {
+    format?: ExportFormat;
+    brand?: SlideBrand;
+    onProgress?: (current: number, total: number) => void;
+  }
 ): Promise<{ name: string; buffer: Buffer }[]> {
+  const format = opts?.format ?? "png";
+  const ext = format === "jpg" ? "jpg" : "png";
   const results: { name: string; buffer: Buffer }[] = [];
   const CONCURRENCY = 3;
 
@@ -188,9 +194,14 @@ export async function exportAllSlides(
     const batchResults = await Promise.all(
       batch.map(async (slide, batchIdx) => {
         const idx = i + batchIdx;
-        const buffer = await exportSlide(slide, aspectRatio);
-        onProgress?.(idx + 1, slides.length);
-        return { name: `slide-${idx + 1}.png`, buffer };
+        const buffer = await exportSlide(slide, theme, aspectRatio, {
+          index: idx + 1,
+          total: slides.length,
+          brand: opts?.brand,
+          format,
+        });
+        opts?.onProgress?.(idx + 1, slides.length);
+        return { name: `slide-${String(idx + 1).padStart(2, "0")}.${ext}`, buffer };
       })
     );
     results.push(...batchResults);
@@ -200,38 +211,27 @@ export async function exportAllSlides(
 }
 
 /**
- * Export all slides as a multi-page PDF (for LinkedIn carousels).
- * Each slide is screenshotted to PNG, then embedded as a PDF page.
+ * Close the singleton browser and release its process.
+ * Long-lived servers should not call this; CLI scripts must, so they can exit.
  */
-export async function exportSlidesAsPdf(
-  slides: Slide[],
-  aspectRatio: AspectRatio,
-  onProgress?: (current: number, total: number) => void
-): Promise<Buffer> {
-  const { width, height } = DIMENSIONS[aspectRatio];
-  const pdfDoc = await PDFDocument.create();
-
-  // Export each slide to PNG, then embed in PDF
-  for (let i = 0; i < slides.length; i++) {
-    const pngBuffer = await exportSlide(slides[i], aspectRatio);
-    const pngImage = await pdfDoc.embedPng(pngBuffer);
-    const page = pdfDoc.addPage([width, height]);
-    page.drawImage(pngImage, {
-      x: 0,
-      y: 0,
-      width,
-      height,
-    });
-    onProgress?.(i + 1, slides.length);
+export async function closeBrowser(): Promise<void> {
+  if (browser) {
+    await browser.close().catch(() => {});
+    browser = null;
+    exportCount = 0;
   }
-
-  const pdfBytes = await pdfDoc.save();
-  return Buffer.from(pdfBytes);
 }
 
-/**
- * Determine the export format for a given aspect ratio.
- */
-export function getExportFormatForRatio(ratio: AspectRatio): "png" | "pdf" {
-  return getExportFormat(ratio);
+/** Resolve the theme for a carousel, falling back to the first available. */
+export async function resolveTheme(themeId?: string | null): Promise<Theme> {
+  if (themeId) {
+    const theme = await getTheme(themeId);
+    if (theme) return theme;
+  }
+  const { listThemes } = await import("./themes");
+  const themes = await listThemes();
+  if (themes.length === 0) {
+    throw new Error("No themes available. Add a DESIGN.md preset to src/lib/themes/presets/.");
+  }
+  return themes[0];
 }

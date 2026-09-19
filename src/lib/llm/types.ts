@@ -1,30 +1,9 @@
-export type LlmMode = "auto" | "http" | "cli";
-
-export type CliType =
-  | "antigravity"
-  | "claude"
-  | "codex"
-  | "gemini"
-  | "cursor"
-  | "opencode"
-  | "aider"
-  | "qwen";
-
-export interface CliInfo {
-  type: CliType;
-  name: string;
-  path: string;
-  recommended?: boolean;
-}
+export type LlmMode = "http";
 
 export interface LlmConfig {
-  mode: LlmMode;
-  // HTTP mode
   baseURL: string;
   apiKey: string;
   model: string;
-  // CLI mode
-  cli?: CliType | null;
 }
 
 export interface LlmMessage {
@@ -49,11 +28,9 @@ export interface LlmTool {
 }
 
 export interface LlmStreamEvent {
-  type: "token" | "tool_call" | "result" | "error" | "session" | "verbose";
+  type: "token" | "tool_call" | "result" | "error";
   text?: string;
-  verboseText?: string;
   toolCall?: LlmToolCall;
-  sessionId?: string;
   error?: string;
 }
 
@@ -63,7 +40,6 @@ export const PROVIDER_PRESETS: Array<{
   baseURL: string;
   model: string;
   free?: boolean;
-  docs?: string;
 }> = [
   { id: "groq", label: "Groq (Free)", baseURL: "https://api.groq.com/openai/v1", model: "llama-3.3-70b-versatile", free: true },
   { id: "google", label: "Google AI Studio (Free)", baseURL: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.0-flash", free: true },
@@ -76,9 +52,7 @@ export const PROVIDER_PRESETS: Array<{
 ];
 
 export const DEFAULT_CONFIG: LlmConfig = {
-  mode: "auto",
   baseURL: "",
   apiKey: "",
   model: "",
-  cli: null,
 };

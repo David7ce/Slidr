@@ -18,10 +18,7 @@ export async function POST(request: Request) {
     };
 
     if (!name || typeof name !== "string" || !name.trim()) {
-      return NextResponse.json(
-        { error: "Name is required" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Name is required" }, { status: 400 });
     }
 
     const ratio = ALL_ASPECT_RATIOS.includes(aspectRatio as AspectRatio)

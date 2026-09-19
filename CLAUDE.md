@@ -1,58 +1,88 @@
 # Slidr
 
-CLI-agnostic AI carousel maker for LinkedIn, Instagram, and TikTok. Next.js 16 + React 19 + TypeScript + Tailwind v4.
+Local-first AI carousel generator for Instagram, LinkedIn, and TikTok.
+Next.js 16 + React 19 + TypeScript + Tailwind v4.
+
+## The core invariant
+
+> **`carousel.json` is the single source of truth. HTML is derived, never stored.**
+
+The AI writes **content only** — never HTML, CSS, colours, fonts, or layout. The
+renderer owns all visual design. If a feature needs the AI to emit markup, add a
+slide type instead.
 
 ## Architecture
 
-- **Frontend**: React app at localhost:3000 with chat panel (left), carousel preview (center), slide filmstrip (bottom)
-- **LLM Adapter**: Dual-mode — HTTP (OpenAI SDK, default) or CLI (agy/claude/codex/gemini, optional). SSE streaming.
-- **Storage**: JSON files in `/data/` with async-mutex locking and atomic writes
-- **Export**: Puppeteer screenshots HTML slides to PNG (ZIP for Instagram/TikTok) or PDF (LinkedIn) at exact dimensions
-- **Slides**: Full HTML documents rendered in sandboxed iframes. `wrapSlideHtml()` is the shared rendering contract between preview and export.
-- **Themes**: DESIGN.md files (Open Design format) in `src/lib/themes/presets/`, parsed at runtime
-- **Watermark**: Non-removable SVG badge composited by Puppeteer after slide render, gated by license state
+- **Frontend**: chat panel (left), carousel preview (centre), slide filmstrip (bottom)
+- **LLM**: HTTP only — any OpenAI-compatible endpoint, SSE streaming
+- **Slides**: 9-variant discriminated union, zod-validated before storage
+- **Renderer**: deterministic templates driven by theme design tokens
+- **Storage**: `projects/<id>/{carousel.json, assets/, output/}`, async-mutex + atomic writes
+- **Export**: Puppeteer → PNG/JPG ZIP, Sharp for sRGB
 
-## Key Files
+## Key files
 
-- `src/lib/llm/adapter.ts` — Dual-mode LLM routing (HTTP vs CLI) + tool execution
-- `src/lib/llm/types.ts` — LlmConfig, provider presets, CLI specs
-- `src/lib/antigravity.ts` — Antigravity CLI (agy) spawner
-- `src/lib/themes/parser.ts` — Parses DESIGN.md → Theme objects
-- `src/lib/themes/serializer.ts` — Theme → CSS vars + font links + auto-resize
-- `src/lib/chat-system-prompt.ts` — Dynamic prompt (brand + carousel + theme + platform)
-- `src/lib/slide-html.ts` — `wrapSlideHtml()` shared preview/export contract
-- `src/lib/watermark.ts` — SVG badge compositor (Puppeteer overlay)
-- `src/lib/license/store.ts` — Lemon Squeezy license validation
-- `src/lib/export-slides.ts` — PNG ZIP + PDF export with watermark injection
-- `src/types/carousel.ts` — 8 AspectRatio types + DIMENSIONS map + platform helpers
+- `src/types/carousel.ts` — `Slide` union (9 types), `DIMENSIONS`
+- `src/lib/slides/schema.ts` — zod schemas; the AI↔storage contract
+- `src/lib/render/` — `tokens.ts`, `primitives.ts`, `templates.ts`, `index.ts`
+- `src/lib/slide-html.ts` — `wrapSlideHtml()`, shared preview/export contract
+- `src/lib/projects.ts` — project storage; all mutations go through here
+- `src/lib/carousels.ts` — re-export shim over `projects.ts`
+- `src/lib/llm/adapter.ts` — `executeToolCall()` with zod validation
+- `src/lib/llm/tools.ts` — tool schemas exposed to the model
+- `src/lib/chat-system-prompt.ts` — the content-strategist prompt
+- `src/lib/export-slides.ts` — Puppeteer export pipeline
+- `src/lib/themes/parser.ts` — parses `DESIGN.md` → `Theme`
 
-## API Routes
+## Slide types
 
-- `POST /api/chat` — LLM adapter SSE streaming (HTTP or CLI)
-- `GET/PUT /api/llm-config` — LLM config (baseURL, apiKey, model, mode, cli)
-- `GET /api/themes` — List 15 theme presets
-- `GET /api/license/status` — License validity
-- `POST /api/license/activate` — Activate Lemon Squeezy key
-- `POST /api/carousels/[id]/export` — Export PNG ZIP or PDF (auto-selected by platform)
-- All other routes from open-carrusel (carousels CRUD, slides, brand, templates, etc.)
+`cover` · `text` · `comparison` · `statistic` · `timeline` · `process` ·
+`diagram` · `quote` · `conclusion`
+
+## Themes
+
+8 presets in `src/lib/themes/presets/`: `swiss-grid`, `editorial-mono`,
+`minimal-mono`, `paper-editorial`, `midnight-neon`, `neo-brutalism-bold`,
+`gradient-mesh-aurora`, `tech-startup`.
+
+## Sizes
+
+Instagram: `ig-1:1`, `ig-4:5` (recommended), `ig-3:4`, `ig-9:16`
+LinkedIn: `li-1:1`, `li-4:5` (recommended), `li-16:9`
+TikTok: `tt-9:16` (recommended)
 
 ## Conventions
 
 - Components max ~300 lines per file
-- Use `cn()` from `src/lib/utils.ts` for class merging
+- Use `cn()` from `src/lib/utils.ts`
 - Types in `src/types/`, libs in `src/lib/`, components in `src/components/`
-- All data mutations go through `src/lib/data.ts`
-- iframe slides always use `sandbox=""` attribute (no JavaScript)
-- Themes are `.md` files — never hardcode theme palettes in components
-- Antigravity CLI (`agy`) is the recommended agentic backend
+- All carousel mutations go through `src/lib/projects.ts`
+- iframe slides always use `sandbox=""`
+- Themes are `.md` files — never hardcode palettes in components
+- Escape interpolated content with `esc()`
 
-## Platform Sizes
+## Gotchas
 
-Instagram: ig-1:1, ig-4:5 (recommended), ig-3:4, ig-9:16 — PNG ZIP export
-LinkedIn: li-1:1, li-4:5 (recommended), li-16:9 — PDF export
-TikTok: tt-9:16 (recommended) — PNG ZIP export
+- **`async-mutex` is not reentrant** — use the `*Unlocked` helper inside `runExclusive`
+- **Puppeteer scripts must call `closeBrowser()`** or the process hangs
+- **Never pipe long-running scripts through `tail`** — it buffers output
 
-## Git Policy
+## Verification
+
+```bash
+pnpm test
+pnpm exec tsx --tsconfig tsconfig.json scripts/verify-render.mts
+pnpm exec tsx --tsconfig tsconfig.json scripts/verify-e2e.mts
+pnpm exec next build
+```
+
+After any template change, **look at the rendered PNGs**.
+
+## Git policy
 
 - Author: `tushar2704 <tushar.inseec@gmail.com>` — sole author, no co-author trailers
-- Auto-commit after each phase
+- Commit messages: imperative mood, concise
+
+## License
+
+Dual: code AGPL-3.0, themes/docs CC-BY-SA-4.0.

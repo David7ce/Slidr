@@ -62,44 +62,6 @@ if (existsSync(llmConfigPath)) {
   add(INFO, "LLM (HTTP)", "not configured — open Settings to add base URL + API key (free Groq/Google tier works)");
 }
 
-// 3. Coding CLIs (optional agentic mode)
-const cliSpecs = [
-  { type: "Antigravity", bins: ["agy", "antigravity"], recommended: true },
-  { type: "Claude Code", bins: ["claude"] },
-  { type: "Codex", bins: ["codex"] },
-  { type: "Gemini", bins: ["gemini"] },
-  { type: "Cursor", bins: ["cursor-agent"] },
-  { type: "OpenCode", bins: ["opencode"] },
-  { type: "Aider", bins: ["aider"] },
-  { type: "Qwen", bins: ["qwen"] },
-];
-
-let anyCli = false;
-const foundClis = [];
-for (const spec of cliSpecs) {
-  for (const bin of spec.bins) {
-    const path = probeBinary(bin);
-    if (path) {
-      foundClis.push({ type: spec.type, path, recommended: spec.recommended });
-      anyCli = true;
-      break;
-    }
-  }
-}
-
-if (foundClis.length > 0) {
-  for (const cli of foundClis) {
-    const tag = cli.recommended ? " (recommended)" : "";
-    add(CHECK, `CLI: ${cli.type}`, `${cli.path}${tag}`);
-  }
-} else {
-  add(INFO, "Coding CLIs", "none detected — HTTP mode (base URL + key) works without a CLI");
-}
-
-if (!anyCli && !existsSync(llmConfigPath)) {
-  add(WARN, "LLM", "no LLM configured — set up HTTP mode in Settings or install a CLI like Antigravity");
-}
-
 // 4. Dependencies
 if (existsSync("node_modules") && statSync("node_modules").isDirectory()) {
   add(CHECK, "Dependencies", "node_modules present");
@@ -108,14 +70,33 @@ if (existsSync("node_modules") && statSync("node_modules").isDirectory()) {
 }
 
 // 5. Data files
-const dataFiles = ["brand.json", "carousels.json", "templates.json", "staged-actions.json", "style-presets.json"];
+const dataFiles = ["brand.json"];
 const missingData = dataFiles.filter((f) => !existsSync(join("data", f)));
 if (missingData.length === 0) {
-  add(CHECK, "Data files", "all seeded");
-} else if (missingData.length === dataFiles.length) {
-  add(FAIL, "Data files", "none seeded — run `npm run setup`", true);
+  add(CHECK, "Data files", "present");
 } else {
-  add(WARN, "Data files", `${missingData.length} missing: ${missingData.join(", ")}`);
+  // Created on first save in the UI; absence is expected on a fresh clone.
+  add(INFO, "Data files", `${missingData.join(", ")} not created yet (written on first use)`);
+}
+
+// 5b. Projects directory
+const projectsDir = join(process.cwd(), "projects");
+if (existsSync(projectsDir)) {
+  let count = 0;
+  try {
+    count = readdirSync(projectsDir).filter((d) => {
+      try {
+        return statSync(join(projectsDir, d)).isDirectory();
+      } catch {
+        return false;
+      }
+    }).length;
+  } catch {
+    // ignore
+  }
+  add(CHECK, "Projects", `${count} carousel project${count === 1 ? "" : "s"}`);
+} else {
+  add(INFO, "Projects", "no projects yet — create a carousel in the UI");
 }
 
 // 6. Theme presets

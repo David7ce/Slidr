@@ -107,14 +107,60 @@ function parsePalette(content: string): ThemePalette {
 function parseFonts(content: string): ThemeFonts {
   const headingMatch = content.match(/Heading:?\s*"([^"]+)"/);
   const bodyMatch = content.match(/Body:?\s*"([^"]+)"/);
-  const headingFallbackMatch = content.match(/fallback:\s*([^\n]+)/);
+
+  const body = bodyMatch ? bodyMatch[1].trim() : "Inter";
+  const heading = headingMatch ? headingMatch[1].trim() : "Inter";
+
+  // Design files declare fallbacks three different ways:
+  //   Fallbacks: "Helvetica Neue", Helvetica, Arial, sans-serif   (one stack)
+  //   Fallbacks: monospace / sans-serif                           (heading / body)
+  //   Fallbacks: Georgia, serif / sans-serif                      (stacks per role)
+  // Split on "/" for the per-role form, then pick the generic family from each
+  // group, since that is what actually matters for CSS.
+  const fallbackMatch = content.match(/Fallbacks?:?\s*([^\n]+)/);
+  let headingFallback = "";
+  let bodyFallback = "";
+
+  if (fallbackMatch) {
+    const parts = fallbackMatch[1]
+      .split("/")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    headingFallback = genericFrom(parts[0] ?? "");
+    bodyFallback = genericFrom(parts[1] ?? parts[0] ?? "");
+  }
 
   return {
-    heading: headingMatch ? headingMatch[1].trim() : "Inter",
-    body: bodyMatch ? bodyMatch[1].trim() : "Inter",
-    headingFallback: headingFallbackMatch ? headingFallbackMatch[1].trim() : "sans-serif",
-    bodyFallback: headingFallbackMatch ? headingFallbackMatch[1].trim() : "sans-serif",
+    heading,
+    body,
+    headingFallback: headingFallback || guessFallback(heading),
+    bodyFallback: bodyFallback || guessFallback(body),
   };
+}
+
+/** Pick the generic CSS family from a fallback stack. */
+function genericFrom(stack: string): string {
+  const generics = ["monospace", "serif", "sans-serif", "system-ui"];
+  const found = stack
+    .split(",")
+    .map((s) => s.replace(/["'`*]/g, "").trim().toLowerCase())
+    .find((s) => generics.includes(s));
+  return found ?? "";
+}
+
+/** Infer a sensible CSS fallback when the design file does not declare one. */
+function guessFallback(font: string): string {
+  const name = font.toLowerCase();
+  if (name.includes("mono") || name.includes("plex") || name.includes("code")) {
+    return "monospace";
+  }
+  if (
+    name.includes("serif") ||
+    ["playfair", "fraunces", "georgia", "garamond"].some((s) => name.includes(s))
+  ) {
+    return "serif";
+  }
+  return "sans-serif";
 }
 
 function parseSpacing(content: string): ThemeSpacing {
@@ -142,8 +188,11 @@ function parseMotion(content: string): ThemeMotion {
 }
 
 function parseDesignRules(content: string): string[] {
-  // Find section 6 "Design Rules" and extract bullet points
-  const rulesSection = content.split(/^##\s+\d+\.?\s*Design Rules/i);
+  // Find the "Design Rules" section and extract its bullet points.
+  // The `m` flag is required: without it `^` only matches the start of the
+  // whole document, so the split never found the heading and every theme
+  // reported zero rules.
+  const rulesSection = content.split(/^##\s+\d+\.?\s*Design Rules.*$/im);
   if (rulesSection.length < 2) return [];
 
   const rulesBlock = rulesSection[1].split(/^##\s/m)[0];
@@ -154,12 +203,7 @@ function parseDesignRules(content: string): string[] {
     .map((line) => line.replace(/^-\s*/, "").trim())
     .filter((rule) => rule.length > 0);
 
-  return rules.length > 0 ? rules : [
-    "Contrast ratio > 4.5:1 for all text",
-    "One focal element per slide",
-    "Hook slide max 8 words, oversized text",
-    "60-80px padding minimum",
-  ];
+  return rules;
 }
 
 /**

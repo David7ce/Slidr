@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Trash2, Grid3X3, Bookmark, Maximize2, Settings, Lock, Palette } from "lucide-react";
+import { Trash2, Grid3X3, Maximize2, Settings, Palette, MessageSquare, Pencil } from "lucide-react";
 import { TopBar } from "@/components/layout/TopBar";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -13,12 +13,14 @@ import { SlideFilmstrip } from "@/components/editor/SlideFilmstrip";
 import { SizeSelector } from "@/components/editor/SizeSelector";
 import { ExportButton } from "@/components/editor/ExportButton";
 import { CaptionPanel } from "@/components/editor/CaptionPanel";
+import { SlideEditor } from "@/components/editor/SlideEditor";
+import { AddSlideDialog } from "@/components/editor/AddSlideDialog";
 import { FullscreenPreview } from "@/components/editor/FullscreenPreview";
 import { ThemeGallery } from "@/components/themes/ThemeGallery";
 import { LlmConfigModal } from "@/components/llm/LlmConfigModal";
-import { LicenseModal } from "@/components/license/LicenseModal";
-import type { Carousel, AspectRatio } from "@/types/carousel";
-import type { LlmConfig, CliInfo } from "@/lib/llm/types";
+import type { Carousel, AspectRatio, SlideBrand } from "@/types/carousel";
+import type { LlmConfig } from "@/lib/llm/types";
+import type { Theme } from "@/types/theme";
 import type { BrandConfig } from "@/types/brand";
 
 interface PageProps {
@@ -29,6 +31,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
   const { id } = use(params);
   const router = useRouter();
   const [carousel, setCarousel] = useState<Carousel | null>(null);
+  const [themes, setThemes] = useState<Theme[]>([]);
   const [notFound, setNotFound] = useState(false);
   const [activeSlide, setActiveSlide] = useState(0);
   const [llmConfigured, setLlmConfigured] = useState(true);
@@ -37,15 +40,12 @@ export default function CarouselEditorPage({ params }: PageProps) {
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [showFullscreen, setShowFullscreen] = useState(false);
   const [showThemePanel, setShowThemePanel] = useState(false);
-
-  // Modals
+  const [showCaptionPanel, setShowCaptionPanel] = useState(false);
+  const [showEditorPanel, setShowEditorPanel] = useState(false);
   const [showLlmConfig, setShowLlmConfig] = useState(false);
-  const [showLicense, setShowLicense] = useState(false);
   const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null);
-  const [detectedClis, setDetectedClis] = useState<CliInfo[]>([]);
   const [brand, setBrand] = useState<BrandConfig | null>(null);
 
-  // Confirm dialog state
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
     title: string;
@@ -63,7 +63,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
         return;
       }
       if (res.ok) {
-        const data = await res.json();
+        const data: Carousel = await res.json();
         setCarousel((prev) => {
           if (prev && data.slides.length > prev.slides.length) {
             setActiveSlide(data.slides.length - 1);
@@ -85,8 +85,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
       const res = await fetch("/api/llm-config");
       const data = await res.json();
       setLlmConfig(data.config);
-      setDetectedClis(data.detectedClis || []);
-      setLlmConfigured(data.httpConfigured || data.cliConfigured);
+      setLlmConfigured(data.configured);
     } catch {
       // ignore
     }
@@ -95,30 +94,45 @@ export default function CarouselEditorPage({ params }: PageProps) {
   const fetchBrand = useCallback(async () => {
     try {
       const res = await fetch("/api/brand");
-      if (res.ok) {
-        const data = await res.json();
-        setBrand(data);
-      }
+      if (res.ok) setBrand(await res.json());
     } catch {
       // ignore
     }
   }, []);
 
+  // Initial data load. State is set after `await`, so this cannot cascade
+  // synchronously; the rule cannot see through the async boundary.
   useEffect(() => {
-    const load = async () => {
-      await fetchCarousel();
-      await fetchLlmConfig();
-      await fetchBrand();
-    };
-    load();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void fetchCarousel();
+    void fetchLlmConfig();
+    void fetchBrand();
   }, [fetchCarousel, fetchLlmConfig, fetchBrand]);
 
-  // Poll for carousel updates while AI is generating slides
+  // Load the theme list once, then derive the active theme during render.
+  // Fetching per themeId change would also mean setting state inside an effect.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/themes")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled) setThemes((data.themes as Theme[]) ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setThemes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const theme =
+    themes.find((t) => t.id === carousel?.themeId) ?? null;
+
+  // Poll for carousel updates while the AI is generating slides.
   useEffect(() => {
     if (!isGenerating) return;
-    const interval = setInterval(() => {
-      fetchCarousel();
-    }, 500);
+    const interval = setInterval(fetchCarousel, 500);
     return () => clearInterval(interval);
   }, [isGenerating, fetchCarousel]);
 
@@ -129,23 +143,17 @@ export default function CarouselEditorPage({ params }: PageProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ aspectRatio: ratio }),
     });
-    if (res.ok) {
-      const updated = await res.json();
-      setCarousel(updated);
-    }
+    if (res.ok) setCarousel(await res.json());
   };
 
-  const handleThemeChange = async (themeId: string | null) => {
+  const handleThemeChange = async (themeId: string) => {
     if (!carousel) return;
     const res = await fetch(`/api/carousels/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ themeId }),
     });
-    if (res.ok) {
-      const updated = await res.json();
-      setCarousel(updated);
-    }
+    if (res.ok) setCarousel(await res.json());
   };
 
   const handleDeleteSlide = (slideId: string) => {
@@ -164,13 +172,6 @@ export default function CarouselEditorPage({ params }: PageProps) {
     });
   };
 
-  const handleUndoSlide = async (slideId: string) => {
-    const res = await fetch(`/api/carousels/${id}/slides/${slideId}/undo`, {
-      method: "POST",
-    });
-    if (res.ok) await fetchCarousel();
-  };
-
   const handleDeleteCarousel = useCallback(() => {
     if (!carousel) return;
     setConfirmState({
@@ -184,10 +185,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
     });
   }, [carousel, id, router]);
 
-  const handleStreamStart = useCallback(() => {
-    setIsGenerating(true);
-  }, []);
-
+  const handleStreamStart = useCallback(() => setIsGenerating(true), []);
   const handleStreamEnd = useCallback(() => {
     setIsGenerating(false);
     fetchCarousel();
@@ -207,9 +205,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
 
   const handleAddSlideRequest = useCallback(() => {
     setChatOpen(true);
-    setTimeout(() => {
-      chatInputRef.current?.focus();
-    }, 100);
+    setTimeout(() => chatInputRef.current?.focus(), 100);
   }, []);
 
   const handleSaveLlmConfig = async (config: LlmConfig) => {
@@ -225,9 +221,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4">
         <p className="text-lg font-semibold">Carousel not found</p>
-        <p className="text-sm text-muted-foreground">
-          This carousel may have been deleted.
-        </p>
+        <p className="text-sm text-muted-foreground">This carousel may have been deleted.</p>
         <Link href="/" className="text-sm text-accent underline">
           Back to dashboard
         </Link>
@@ -243,6 +237,13 @@ export default function CarouselEditorPage({ params }: PageProps) {
     );
   }
 
+  const brandMark: SlideBrand | undefined = brand
+    ? {
+        name: brand.authorName || brand.name || undefined,
+        logoUrl: brand.logoPath ?? undefined,
+      }
+    : undefined;
+
   return (
     <div className="h-full flex flex-col">
       <TopBar
@@ -255,43 +256,33 @@ export default function CarouselEditorPage({ params }: PageProps) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ name }),
           });
-          if (res.ok) {
-            const updated = await res.json();
-            setCarousel(updated);
-          }
+          if (res.ok) setCarousel(await res.json());
         }}
         onSettingsClick={() => setShowLlmConfig(true)}
       />
 
-      {/* Fullscreen preview */}
-      <FullscreenPreview
-        open={showFullscreen}
-        onOpenChange={setShowFullscreen}
-        slides={carousel.slides}
-        aspectRatio={carousel.aspectRatio}
-        activeIndex={activeSlide}
-        onActiveChange={setActiveSlide}
-        brand={brand || undefined}
-      />
+      {theme && (
+        <FullscreenPreview
+          open={showFullscreen}
+          onOpenChange={setShowFullscreen}
+          slides={carousel.slides}
+          theme={theme}
+          aspectRatio={carousel.aspectRatio}
+          activeIndex={activeSlide}
+          onActiveChange={setActiveSlide}
+          brand={brandMark}
+        />
+      )}
 
-      {/* LLM Config Modal */}
       {llmConfig && (
         <LlmConfigModal
           open={showLlmConfig}
           onClose={() => setShowLlmConfig(false)}
           config={llmConfig}
-          detectedClis={detectedClis}
           onSave={handleSaveLlmConfig}
         />
       )}
 
-      {/* License Modal */}
-      <LicenseModal
-        open={showLicense}
-        onClose={() => setShowLicense(false)}
-      />
-
-      {/* Confirm dialog */}
       <ConfirmDialog
         open={confirmState.open}
         onOpenChange={(open) => setConfirmState((s) => ({ ...s, open }))}
@@ -302,24 +293,19 @@ export default function CarouselEditorPage({ params }: PageProps) {
         onConfirm={confirmState.onConfirm}
       />
 
-      {/* Main editor area */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* Chat panel */}
         {chatOpen && (
           <div className="oc-fade w-80 border-r border-border shrink-0 flex flex-col bg-surface">
             <ChatPanel
               carouselId={id}
-              claudeAvailable={llmConfigured}
-              referenceImages={carousel.referenceImages || []}
+              llmConfigured={llmConfigured}
               onStreamStart={handleStreamStart}
               onStreamEnd={handleStreamEnd}
               chatInputRef={chatInputRef}
-              themeId={carousel.themeId}
             />
           </div>
         )}
 
-        {/* Theme panel (collapsible) */}
         {showThemePanel && (
           <div className="oc-fade w-72 border-r border-border shrink-0 flex flex-col bg-surface p-4 overflow-y-auto">
             <div className="flex items-center justify-between mb-3">
@@ -338,15 +324,55 @@ export default function CarouselEditorPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Right side: toolbar + preview */}
-        <div className="flex-1 flex flex-col min-w-0 min-h-0">
-          {/* Toolbar */}
-          <div className="h-11 border-b border-border bg-surface flex items-center px-4 gap-2 shrink-0 overflow-x-auto">
-            <SizeSelector
-              value={carousel.aspectRatio}
-              onChange={handleAspectChange}
+        {showCaptionPanel && (
+          <div className="oc-fade w-72 border-r border-border shrink-0 flex flex-col bg-surface overflow-y-auto">
+            <div className="flex items-center justify-between p-4 pb-0">
+              <span className="text-sm font-semibold">Caption</span>
+              <Button variant="ghost" size="sm" onClick={() => setShowCaptionPanel(false)}>
+                ×
+              </Button>
+            </div>
+            <CaptionPanel
+              carouselId={id}
+              caption={carousel.caption}
+              hashtags={carousel.hashtags}
+              onUpdate={fetchCarousel}
             />
+          </div>
+        )}
+
+        {showEditorPanel &&
+          (carousel.slides[activeSlide] ? (
+            <div className="oc-fade w-80 border-r border-border shrink-0 flex flex-col bg-surface">
+              <SlideEditor
+                key={carousel.slides[activeSlide].id}
+                carouselId={id}
+                slide={carousel.slides[activeSlide]}
+                onSaved={fetchCarousel}
+              />
+            </div>
+          ) : (
+            <div className="oc-fade w-80 border-r border-border shrink-0 flex flex-col bg-surface p-6 text-center justify-center">
+              <p className="text-sm text-muted-foreground">
+                No slide selected. Add a slide to edit its content.
+              </p>
+            </div>
+          ))}
+
+        <div className="flex-1 flex flex-col min-w-0 min-h-0">
+          <div className="h-11 border-b border-border bg-surface flex items-center px-4 gap-2 shrink-0 overflow-x-auto">
+            <SizeSelector value={carousel.aspectRatio} onChange={handleAspectChange} />
             <div className="flex-1" />
+            <Button
+              variant={chatOpen ? "outline" : "ghost"}
+              size="sm"
+              onClick={() => setChatOpen(!chatOpen)}
+              className={chatOpen ? "border-accent text-accent" : "text-muted-foreground"}
+              aria-label="Toggle chat"
+              title="AI assistant"
+            >
+              <MessageSquare className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant={showThemePanel ? "outline" : "ghost"}
               size="sm"
@@ -357,6 +383,27 @@ export default function CarouselEditorPage({ params }: PageProps) {
             >
               <Palette className="h-3.5 w-3.5" />
             </Button>
+            <Button
+              variant={showCaptionPanel ? "outline" : "ghost"}
+              size="sm"
+              onClick={() => setShowCaptionPanel(!showCaptionPanel)}
+              className={showCaptionPanel ? "border-accent text-accent" : "text-muted-foreground"}
+              aria-label="Caption"
+              title="Caption & hashtags"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant={showEditorPanel ? "outline" : "ghost"}
+              size="sm"
+              onClick={() => setShowEditorPanel(!showEditorPanel)}
+              className={showEditorPanel ? "border-accent text-accent" : "text-muted-foreground"}
+              aria-label="Edit slide"
+              title="Edit slide content"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <AddSlideDialog carouselId={id} onAdded={fetchCarousel} />
             <Button
               variant="ghost"
               size="sm"
@@ -380,91 +427,62 @@ export default function CarouselEditorPage({ params }: PageProps) {
             <Button
               variant="ghost"
               size="sm"
-              onClick={async () => {
-                await fetch("/api/templates", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ carouselId: carousel.id }),
-                });
-              }}
-              className="text-muted-foreground"
-              aria-label="Save as template"
-              title="Save as template"
-            >
-              <Bookmark className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowLicense(true)}
-              className="text-muted-foreground"
-              aria-label="License"
-              title="Remove watermark"
-            >
-              <Lock className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowLlmConfig(true)}
-              className="text-muted-foreground"
-              aria-label="LLM settings"
-              title="LLM configuration"
-            >
-              <Settings className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
               onClick={handleDeleteCarousel}
               className="text-muted-foreground hover:text-destructive"
               aria-label="Delete carousel"
+              title="Delete carousel"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
-            <button
-              onClick={() => setChatOpen(!chatOpen)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-3 py-1.5 rounded-md border border-border hover:bg-muted"
-            >
-              {chatOpen ? "Hide Chat" : "Show Chat"}
-            </button>
-            <ExportButton
-              carouselId={carousel.id}
-              slideCount={carousel.slides.length}
-            />
+            <ExportButton carouselId={id} slideCount={carousel.slides.length} />
           </div>
 
-          {/* Carousel preview */}
-          <CarouselPreview
-            slides={carousel.slides}
-            aspectRatio={carousel.aspectRatio}
-            activeIndex={activeSlide}
-            onActiveChange={setActiveSlide}
-            showSafeZones={showSafeZones}
-            brand={brand || undefined}
-          />
+          {theme ? (
+            <CarouselPreview
+              slides={carousel.slides}
+              theme={theme}
+              aspectRatio={carousel.aspectRatio}
+              activeIndex={activeSlide}
+              onActiveChange={setActiveSlide}
+              showSafeZones={showSafeZones}
+              brand={brandMark}
+            />
+          ) : (
+            <div className="flex-1 flex items-center justify-center bg-muted">
+              <div className="text-center text-muted-foreground p-8 max-w-xs">
+                <Palette className="h-8 w-8 mx-auto mb-3 opacity-40" />
+                <p className="text-sm font-medium">No theme selected</p>
+                <p className="text-xs mt-1">
+                  Pick a theme so slides can be rendered. The AI can also choose one for you.
+                </p>
+                <Button
+                  variant="accent"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => setShowThemePanel(true)}
+                >
+                  Choose a theme
+                </Button>
+              </div>
+            </div>
+          )}
 
-          {/* Caption panel */}
-          <CaptionPanel
-            caption={carousel.caption}
-            hashtags={carousel.hashtags}
-          />
+          {theme && (
+            <SlideFilmstrip
+              slides={carousel.slides}
+              theme={theme}
+              aspectRatio={carousel.aspectRatio}
+              activeIndex={activeSlide}
+              onActiveChange={setActiveSlide}
+              onDeleteSlide={handleDeleteSlide}
+              onAddSlideRequest={handleAddSlideRequest}
+              onReorderSlides={handleReorderSlides}
+              isGenerating={isGenerating}
+              brand={brandMark}
+            />
+          )}
         </div>
       </div>
-
-      {/* Filmstrip */}
-      <SlideFilmstrip
-        slides={carousel.slides}
-        aspectRatio={carousel.aspectRatio}
-        activeIndex={activeSlide}
-        onActiveChange={setActiveSlide}
-        onDeleteSlide={handleDeleteSlide}
-        onUndoSlide={handleUndoSlide}
-        onAddSlideRequest={handleAddSlideRequest}
-        onReorderSlides={handleReorderSlides}
-        isGenerating={isGenerating}
-        brand={brand || undefined}
-      />
     </div>
   );
 }

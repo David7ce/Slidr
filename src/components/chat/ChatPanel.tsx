@@ -3,60 +3,45 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
-import { ReferenceImages } from "./ReferenceImages";
 import { AlertCircle, Plug } from "lucide-react";
-import type { ReferenceImage } from "@/types/carousel";
 
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  verboseContent?: string;
 }
 
 interface ChatPanelProps {
   carouselId: string;
-  referenceImages?: ReferenceImage[];
-  claudeAvailable: boolean;
+  llmConfigured: boolean;
   onStreamStart?: () => void;
   onStreamEnd?: () => void;
   chatInputRef?: React.RefObject<HTMLTextAreaElement | null>;
-  themeId?: string | null;
 }
 
 export function ChatPanel({
   carouselId,
-  claudeAvailable,
-  referenceImages = [],
+  llmConfigured,
   onStreamStart,
   onStreamEnd,
   chatInputRef,
-  themeId,
 }: ChatPanelProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Read persisted history lazily on first render. Reading in an effect would
+  // trigger an extra render pass for data that is available synchronously.
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const stored = localStorage.getItem(`chat-messages-${carouselId}`);
+      return stored ? (JSON.parse(stored) as Message[]) : [];
+    } catch {
+      return [];
+    }
+  });
   const [isStreaming, setIsStreaming] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Load session ID and chat history from localStorage
-  useEffect(() => {
-    const storedSession = localStorage.getItem(`chat-session-${carouselId}`);
-    const storedMessages = localStorage.getItem(`chat-messages-${carouselId}`);
-    setTimeout(() => {
-      if (storedSession) setSessionId(storedSession);
-      if (storedMessages) {
-        try {
-          setMessages(JSON.parse(storedMessages));
-        } catch {
-          // ignore corrupted data
-        }
-      }
-    }, 0);
-  }, [carouselId]);
-
-  // Persist messages to localStorage
   const persistMessages = useCallback(
     (msgs: Message[]) => {
       try {
@@ -70,16 +55,13 @@ export function ChatPanel({
 
   const handleClearChat = useCallback(() => {
     setMessages([]);
-    setSessionId(null);
     localStorage.removeItem(`chat-messages-${carouselId}`);
-    localStorage.removeItem(`chat-session-${carouselId}`);
   }, [carouselId]);
 
   const handleStopGenerating = useCallback(() => {
     abortRef.current?.abort();
   }, []);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -93,20 +75,11 @@ export function ChatPanel({
       setIsStreaming(true);
       onStreamStart?.();
 
-      // Add user message
-      const userMsg: Message = {
-        id: crypto.randomUUID(),
-        role: "user",
-        content: message,
-      };
+      const userMsg: Message = { id: crypto.randomUUID(), role: "user", content: message };
       setMessages((prev) => [...prev, userMsg]);
 
-      // Add empty assistant message for streaming
       const assistantId = crypto.randomUUID();
-      setMessages((prev) => [
-        ...prev,
-        { id: assistantId, role: "assistant", content: "" },
-      ]);
+      setMessages((prev) => [...prev, { id: assistantId, role: "assistant", content: "" }]);
 
       abortRef.current = new AbortController();
 
@@ -114,20 +87,13 @@ export function ChatPanel({
         const response = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            message,
-            sessionId,
-            carouselId,
-            themeId,
-          }),
+          body: JSON.stringify({ message, carouselId }),
           signal: abortRef.current.signal,
         });
 
         if (!response.ok) {
           const err = await response.json().catch(() => ({}));
-          throw new Error(
-            (err as { error?: string }).error || "Failed to connect to AI"
-          );
+          throw new Error((err as { error?: string }).error || "Failed to connect to AI");
         }
 
         const reader = response.body?.getReader();
@@ -146,94 +112,29 @@ export function ChatPanel({
           buffer = lines.pop() ?? "";
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.type === "token" && typeof data.text === "string") {
-                  accumulated += data.text;
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantId
-                        ? { ...m, content: accumulated }
-                        : m
-                    )
-                  );
-                } else if (data.type === "verbose" && typeof data.verboseText === "string") {
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantId
-                        ? { ...m, verboseContent: (m.verboseContent || "") + data.verboseText }
-                        : m
-                    )
-                  );
-                } else if (data.type === "result" && typeof data.text === "string") {
-                  accumulated = data.text; // result is the final complete text
-                  setMessages((prev) =>
-                    prev.map((m) =>
-                      m.id === assistantId
-                        ? { ...m, content: accumulated }
-                        : m
-                    )
-                  );
-                }
-              } catch {
-                // skip unparseable
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === "token" && typeof data.text === "string") {
+                accumulated += data.text;
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === assistantId ? { ...m, content: accumulated } : m))
+                );
+              } else if (data.type === "error" && typeof data.error === "string") {
+                setError(data.error);
               }
-            } else if (line.startsWith("event: done")) {
-              // Next line has the done data
-            } else if (
-              line.startsWith("data: ") &&
-              line.includes("sessionId")
-            ) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.sessionId) {
-                  setSessionId(data.sessionId);
-                  localStorage.setItem(
-                    `chat-session-${carouselId}`,
-                    data.sessionId
-                  );
-                }
-              } catch {
-                // skip
-              }
-            }
-          }
-        }
-
-        // Parse any remaining buffer for the done event
-        if (buffer.trim()) {
-          for (const line of buffer.split("\n")) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.sessionId) {
-                  setSessionId(data.sessionId);
-                  localStorage.setItem(
-                    `chat-session-${carouselId}`,
-                    data.sessionId
-                  );
-                }
-              } catch {
-                // skip
-              }
+            } catch {
+              // skip unparseable
             }
           }
         }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") return;
-        const message = err instanceof Error ? err.message : "An unexpected error occurred";
-        setError(message);
-        // Remove empty assistant message on error
-        setMessages((prev) =>
-          prev.filter(
-            (m) => m.id !== assistantId || m.content.length > 0
-          )
-        );
+        setError(err instanceof Error ? err.message : "An unexpected error occurred");
+        setMessages((prev) => prev.filter((m) => m.id !== assistantId || m.content.length > 0));
       } finally {
         setIsStreaming(false);
         abortRef.current = null;
-        // Persist messages after stream completes
         setMessages((prev) => {
           persistMessages(prev);
           return prev;
@@ -241,17 +142,17 @@ export function ChatPanel({
         onStreamEnd?.();
       }
     },
-    [isStreaming, sessionId, carouselId, themeId, onStreamStart, onStreamEnd, persistMessages]
+    [isStreaming, carouselId, onStreamStart, onStreamEnd, persistMessages]
   );
 
-  if (!claudeAvailable) {
+  if (!llmConfigured) {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 text-center">
         <Plug className="h-10 w-10 text-muted-foreground mb-3" />
         <h3 className="font-semibold text-sm mb-1">No LLM Configured</h3>
         <p className="text-xs text-muted-foreground max-w-[220px]">
-          Open Settings (gear icon) to enter a base URL + API key (free Groq or
-          Google tier works), or install a coding CLI like Antigravity.
+          Open Settings (gear icon) and enter a base URL, API key, and model. A
+          free Groq or Google AI Studio key works well.
         </p>
       </div>
     );
@@ -262,9 +163,7 @@ export function ChatPanel({
       <div className="px-4 py-3 border-b border-border flex items-start justify-between">
         <div>
           <h2 className="text-sm font-semibold">AI Assistant</h2>
-          <p className="text-xs text-muted-foreground">
-            Describe the carousel you want to create
-          </p>
+          <p className="text-xs text-muted-foreground">Describe the carousel you want</p>
         </div>
         {messages.length > 0 && (
           <button
@@ -276,19 +175,11 @@ export function ChatPanel({
         )}
       </div>
 
-      <ReferenceImages
-        carouselId={carouselId}
-        images={referenceImages}
-        onImagesChange={() => onStreamEnd?.()}
-      />
-
       <div ref={scrollRef} className="flex-1 overflow-y-auto">
         {messages.length === 0 && (
           <div className="p-6 text-center text-muted-foreground">
             <p className="text-sm mb-1">No messages yet</p>
-            <p className="text-xs">
-              Tell me what carousel you&apos;d like to create
-            </p>
+            <p className="text-xs">Tell me what carousel you&apos;d like to create</p>
           </div>
         )}
         {messages.map((msg) => (
@@ -296,11 +187,8 @@ export function ChatPanel({
             key={msg.id}
             role={msg.role}
             content={msg.content}
-            verboseContent={msg.verboseContent}
             isStreaming={
-              isStreaming &&
-              msg.role === "assistant" &&
-              msg.id === messages[messages.length - 1]?.id
+              isStreaming && msg.role === "assistant" && msg.id === messages[messages.length - 1]?.id
             }
           />
         ))}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Trash2, Undo2, GripVertical } from "lucide-react";
+import { Plus, Trash2, GripVertical } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -17,55 +17,51 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { SlideRenderer } from "./SlideRenderer";
-import type { Slide, AspectRatio } from "@/types/carousel";
+import type { Slide, AspectRatio, SlideBrand } from "@/types/carousel";
 import { DIMENSIONS, MAX_SLIDES } from "@/types/carousel";
+import type { Theme } from "@/types/theme";
 import { cn } from "@/lib/utils";
-import type { BrandConfig } from "@/types/brand";
 
 interface SlideFilmstripProps {
   slides: Slide[];
+  theme: Theme;
   aspectRatio: AspectRatio;
   activeIndex: number;
   onActiveChange: (index: number) => void;
   onDeleteSlide?: (slideId: string) => void;
-  onUndoSlide?: (slideId: string) => void;
   onAddSlideRequest?: () => void;
   onReorderSlides?: (slideIds: string[]) => void;
   isGenerating?: boolean;
-  brand?: BrandConfig;
+  brand?: SlideBrand;
 }
 
 function SortableSlideThumb({
   slide,
   index,
+  total,
   isActive,
   thumbWidth,
   thumbHeight,
   aspectRatio,
+  theme,
   onSelect,
   onDelete,
-  onUndo,
   brand,
 }: {
   slide: Slide;
   index: number;
+  total: number;
   isActive: boolean;
   thumbWidth: number;
   thumbHeight: number;
   aspectRatio: AspectRatio;
+  theme: Theme;
   onSelect: () => void;
   onDelete?: () => void;
-  onUndo?: () => void;
-  brand?: BrandConfig;
+  brand?: SlideBrand;
 }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: slide.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: slide.id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -80,7 +76,6 @@ function SortableSlideThumb({
       style={style}
       className={cn("oc-enter-pop relative group shrink-0", isDragging && "!opacity-50")}
     >
-      {/* Drag handle */}
       <div
         {...attributes}
         {...listeners}
@@ -101,29 +96,17 @@ function SortableSlideThumb({
         aria-label={`Select slide ${index + 1}`}
       >
         <SlideRenderer
-          html={slide.html}
+          slide={slide}
+          theme={theme}
           aspectRatio={aspectRatio}
-          className="w-full h-full"
+          index={index + 1}
+          total={total}
           brand={brand}
+          className="w-full h-full"
         />
       </button>
 
-      {/* Hover actions */}
       <div className="absolute -top-1 -right-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        {onUndo && slide.previousVersions.length > 0 && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 bg-white shadow-sm border border-border rounded-full"
-            onClick={(e) => {
-              e.stopPropagation();
-              onUndo();
-            }}
-            aria-label="Undo last change"
-          >
-            <Undo2 className="h-2.5 w-2.5" />
-          </Button>
-        )}
         {onDelete && (
           <Button
             variant="ghost"
@@ -140,7 +123,6 @@ function SortableSlideThumb({
         )}
       </div>
 
-      {/* Slide number */}
       <div className="absolute bottom-1 left-1 text-[9px] font-bold text-white bg-black/60 rounded px-1 py-0.5 leading-none">
         {index + 1}
       </div>
@@ -150,11 +132,11 @@ function SortableSlideThumb({
 
 export function SlideFilmstrip({
   slides,
+  theme,
   aspectRatio,
   activeIndex,
   onActiveChange,
   onDeleteSlide,
-  onUndoSlide,
   onAddSlideRequest,
   onReorderSlides,
   isGenerating,
@@ -165,9 +147,7 @@ export function SlideFilmstrip({
   const thumbWidth = Math.round(thumbHeight * (slideW / slideH));
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { delay: 200, tolerance: 5 },
-    })
+    useSensor(PointerSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   );
 
   const handleDragEnd = (event: DragEndEvent) => {
@@ -178,14 +158,12 @@ export function SlideFilmstrip({
     const newIndex = slides.findIndex((s) => s.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    // Build new order
     const newSlides = [...slides];
     const [moved] = newSlides.splice(oldIndex, 1);
     newSlides.splice(newIndex, 0, moved);
 
     onReorderSlides?.(newSlides.map((s) => s.id));
 
-    // Update active index to follow the selected slide
     if (activeIndex === oldIndex) {
       onActiveChange(newIndex);
     } else if (activeIndex > oldIndex && activeIndex <= newIndex) {
@@ -198,28 +176,22 @@ export function SlideFilmstrip({
   return (
     <div className="border-t border-border bg-surface shrink-0">
       <div className="h-28 flex items-center gap-3 px-4 overflow-x-auto">
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragEnd={handleDragEnd}
-        >
-          <SortableContext
-            items={slides.map((s) => s.id)}
-            strategy={horizontalListSortingStrategy}
-          >
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={slides.map((s) => s.id)} strategy={horizontalListSortingStrategy}>
             {slides.map((slide, index) => (
               <SortableSlideThumb
                 key={slide.id}
                 slide={slide}
                 index={index}
+                total={slides.length}
                 isActive={index === activeIndex}
                 thumbWidth={thumbWidth}
                 thumbHeight={thumbHeight}
                 aspectRatio={aspectRatio}
+                theme={theme}
+                brand={brand}
                 onSelect={() => onActiveChange(index)}
                 onDelete={onDeleteSlide ? () => onDeleteSlide(slide.id) : undefined}
-                onUndo={onUndoSlide ? () => onUndoSlide(slide.id) : undefined}
-                brand={brand}
               />
             ))}
           </SortableContext>

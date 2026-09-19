@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Settings, Layers, Calendar as CalendarIcon, BarChart3 } from "lucide-react";
+import { ArrowLeft, Settings, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface TopBarProps {
@@ -75,28 +75,13 @@ export function TopBar({
             onClick={() => editable && startEditing()}
             title={editable ? "Click to rename" : undefined}
           >
-            {title || "Slidr by Uitbreiden"}
+            {title || "Slidr"}
           </span>
         )}
       </div>
       <div className="flex-1" />
-      <Link href="/analytics">
-        <Button variant="ghost" size="icon" aria-label="Analytics">
-          <BarChart3 className="h-4 w-4" />
-        </Button>
-      </Link>
-      <Link href="/calendar">
-        <Button variant="ghost" size="icon" aria-label="Calendar">
-          <CalendarIcon className="h-4 w-4" />
-        </Button>
-      </Link>
       {onSettingsClick && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onSettingsClick}
-          aria-label="Settings"
-        >
+        <Button variant="ghost" size="icon" onClick={onSettingsClick} aria-label="Settings">
           <Settings className="h-4 w-4" />
         </Button>
       )}

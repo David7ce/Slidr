@@ -75,12 +75,12 @@ function findClaudePath() {
 }
 
 function seedDataFiles() {
+  // data/ holds global config only; per-carousel files live in projects/<id>/.
   const dataDir = path.join(ROOT, "data");
-  const uploadsDir = path.join(ROOT, "public", "uploads");
-  const exportsDir = path.join(dataDir, "exports");
+  const projectsDir = path.join(ROOT, "projects");
   const fontCacheDir = path.join(dataDir, ".font-cache");
 
-  for (const dir of [dataDir, uploadsDir, exportsDir, fontCacheDir]) {
+  for (const dir of [dataDir, projectsDir, fontCacheDir]) {
     fs.mkdirSync(dir, { recursive: true });
   }
 
@@ -101,10 +101,6 @@ function seedDataFiles() {
       createdAt: "",
       updatedAt: "",
     },
-    "carousels.json": { carousels: [] },
-    "templates.json": { templates: [] },
-    "staged-actions.json": { actions: [] },
-    "style-presets.json": { presets: [] },
   };
 
   for (const [name, contents] of Object.entries(seeds)) {

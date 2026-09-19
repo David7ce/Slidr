@@ -11,74 +11,33 @@ interface ExportButtonProps {
 
 export function ExportButton({ carouselId, slideCount }: ExportButtonProps) {
   const [exporting, setExporting] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [done, setDone] = useState(false);
+  const [format, setFormat] = useState<"png" | "jpg">("png");
 
   const handleExport = async () => {
     if (exporting || slideCount === 0) return;
     setExporting(true);
     setDone(false);
-    setProgress({ current: 0, total: slideCount });
 
     try {
-      const response = await fetch(`/api/carousels/${carouselId}/export`, {
-        method: "POST",
-      });
+      const response = await fetch(
+        `/api/carousels/${carouselId}/export?format=${format}`,
+        { method: "POST" }
+      );
 
       if (!response.ok) {
-        throw new Error("Export failed");
+        const err = await response.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error || "Export failed");
       }
 
-      // Check if it's SSE (progress) or direct blob (ZIP)
-      const contentType = response.headers.get("Content-Type");
-      if (contentType?.includes("text/event-stream")) {
-        // SSE progress mode
-        const reader = response.body?.getReader();
-        if (!reader) return;
-
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        while (true) {
-          const { done: streamDone, value } = await reader.read();
-          if (streamDone) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split("\n");
-          buffer = lines.pop() ?? "";
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              try {
-                const data = JSON.parse(line.slice(6));
-                if (data.current && data.total) {
-                  setProgress({ current: data.current, total: data.total });
-                }
-                if (data.downloadUrl) {
-                  // Trigger download
-                  const a = document.createElement("a");
-                  a.href = data.downloadUrl;
-                  a.download = `carousel-${carouselId}.zip`;
-                  a.click();
-                  setDone(true);
-                }
-              } catch {
-                // skip
-              }
-            }
-          }
-        }
-      } else {
-        // Direct ZIP download
-        const blob = await response.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `carousel-${carouselId}.zip`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setDone(true);
-      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `carousel-${carouselId}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setDone(true);
     } catch (error) {
       console.error("Export error:", error);
     } finally {
@@ -88,35 +47,45 @@ export function ExportButton({ carouselId, slideCount }: ExportButtonProps) {
   };
 
   return (
-    <Button
-      onClick={handleExport}
-      disabled={exporting || slideCount === 0}
-      variant="accent"
-      size="sm"
-    >
-      <span
-        key={exporting ? "exporting" : done ? "done" : "idle"}
-        className="oc-enter-pop inline-flex items-center gap-2"
+    <div className="flex items-center gap-1">
+      <select
+        value={format}
+        onChange={(e) => setFormat(e.target.value as "png" | "jpg")}
+        disabled={exporting}
+        className="h-8 rounded-md border border-border bg-surface px-2 text-xs text-foreground"
+        aria-label="Export format"
       >
-        {exporting ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>
-              {progress.current}/{progress.total}
-            </span>
-          </>
-        ) : done ? (
-          <>
-            <Check className="h-4 w-4" />
-            <span>Downloaded!</span>
-          </>
-        ) : (
-          <>
-            <Download className="h-4 w-4" />
-            <span>Export</span>
-          </>
-        )}
-      </span>
-    </Button>
+        <option value="png">PNG</option>
+        <option value="jpg">JPG</option>
+      </select>
+      <Button
+        onClick={handleExport}
+        disabled={exporting || slideCount === 0}
+        variant="accent"
+        size="sm"
+      >
+        <span
+          key={exporting ? "exporting" : done ? "done" : "idle"}
+          className="oc-enter-pop inline-flex items-center gap-2"
+        >
+          {exporting ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span>Exporting…</span>
+            </>
+          ) : done ? (
+            <>
+              <Check className="h-4 w-4" />
+              <span>Downloaded!</span>
+            </>
+          ) : (
+            <>
+              <Download className="h-4 w-4" />
+              <span>Export</span>
+            </>
+          )}
+        </span>
+      </Button>
+    </div>
   );
 }

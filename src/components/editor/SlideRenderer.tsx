@@ -2,33 +2,46 @@
 
 import { useMemo, useRef, useEffect, useState, useCallback } from "react";
 import { wrapSlideHtml } from "@/lib/slide-html";
-import type { AspectRatio } from "@/types/carousel";
+import { renderSlide, themeFontFamilies } from "@/lib/render";
+import type { Slide, AspectRatio, SlideBrand } from "@/types/carousel";
 import { DIMENSIONS } from "@/types/carousel";
-import type { BrandConfig } from "@/types/brand";
+import type { Theme } from "@/types/theme";
 
 interface SlideRendererProps {
-  html: string;
+  slide: Slide;
+  theme: Theme;
   aspectRatio: AspectRatio;
+  index: number;
+  total: number;
+  brand?: SlideBrand;
   className?: string;
   style?: React.CSSProperties;
-  brand?: BrandConfig;
 }
 
+/**
+ * Renders a structured slide in a sandboxed iframe.
+ *
+ * The HTML is produced by the same deterministic renderer used for export, so
+ * the preview is pixel-identical to the exported image.
+ */
 export function SlideRenderer({
-  html,
+  slide,
+  theme,
   aspectRatio,
+  index,
+  total,
+  brand,
   className,
   style,
-  brand,
 }: SlideRendererProps) {
   const outerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
   const { width: slideW, height: slideH } = DIMENSIONS[aspectRatio];
 
-  const srcDoc = useMemo(
-    () => wrapSlideHtml(html, aspectRatio, { brand }),
-    [html, aspectRatio, brand]
-  );
+  const srcDoc = useMemo(() => {
+    const body = renderSlide(slide, theme, aspectRatio, { index, total, brand });
+    return wrapSlideHtml(body, aspectRatio, { fontFamilies: themeFontFamilies(theme) });
+  }, [slide, theme, aspectRatio, index, total, brand]);
 
   const measure = useCallback(() => {
     const el = outerRef.current;
@@ -48,11 +61,7 @@ export function SlideRenderer({
     return () => obs.disconnect();
   }, [measure]);
 
-  // Calculate scale to fit the slide into the container
-  const scale = dims
-    ? Math.min(dims.w / slideW, dims.h / slideH)
-    : 0;
-
+  const scale = dims ? Math.min(dims.w / slideW, dims.h / slideH) : 0;
   const scaledW = Math.floor(slideW * scale);
   const scaledH = Math.floor(slideH * scale);
 
@@ -83,7 +92,7 @@ export function SlideRenderer({
           <iframe
             sandbox=""
             srcDoc={srcDoc}
-            title="Slide preview"
+            title={`Slide ${index}`}
             style={{
               width: slideW,
               height: slideH,

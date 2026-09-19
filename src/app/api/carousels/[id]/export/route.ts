@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import archiver from "archiver";
 import { getCarousel } from "@/lib/carousels";
-import { exportAllSlides, exportSlidesAsPdf, getExportFormatForRatio } from "@/lib/export-slides";
-import { getExportFormat } from "@/types/carousel";
+import { writeOutput } from "@/lib/projects";
+import { getBrand } from "@/lib/brand";
+import type { SlideBrand } from "@/types/carousel";
+import { exportAllSlides, resolveTheme, type ExportFormat } from "@/lib/export-slides";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,69 +25,57 @@ export async function POST(
     return NextResponse.json({ error: "No slides to export" }, { status: 400 });
   }
 
-  // Check if the request wants a specific format (via query param)
   const url = new URL(request.url);
-  const requestedFormat = url.searchParams.get("format");
-  const platformFormat = getExportFormat(carousel.aspectRatio);
-  const exportFormat = requestedFormat === "png" || requestedFormat === "pdf"
-    ? requestedFormat
-    : platformFormat;
+  const requested = url.searchParams.get("format");
+  const format: ExportFormat = requested === "jpg" ? "jpg" : "png";
 
   const safeName = carousel.name.replace(/[^a-zA-Z0-9-_]/g, "_");
 
   try {
-    if (exportFormat === "pdf") {
-      // Export as PDF (LinkedIn carousels)
-      const pdfBuffer = await exportSlidesAsPdf(
-        carousel.slides,
-        carousel.aspectRatio
-      );
+    const theme = await resolveTheme(carousel.themeId);
+    const brandConfig = await getBrand();
+    const brand: SlideBrand = {
+      name: brandConfig.authorName || brandConfig.name || undefined,
+      logoUrl: brandConfig.logoPath ?? undefined,
+    };
 
-      return new Response(new Uint8Array(pdfBuffer), {
-        headers: {
-          "Content-Type": "application/pdf",
-          "Content-Disposition": `attachment; filename="carousel-${safeName}.pdf"`,
-        },
-      });
-    } else {
-      // Export as PNG ZIP (Instagram/TikTok carousels)
-      const pngBuffers = await exportAllSlides(
-        carousel.slides,
-        carousel.aspectRatio
-      );
+    const images = await exportAllSlides(carousel.slides, theme, carousel.aspectRatio, {
+      format,
+      brand,
+    });
 
-      const zipBuffer = await new Promise<Buffer>((resolve, reject) => {
-        const archive = archiver("zip", { zlib: { level: 5 } });
-        const chunks: Buffer[] = [];
+    const zipBuffer = await new Promise<Buffer>((resolve, reject) => {
+      const archive = archiver("zip", { zlib: { level: 5 } });
+      const chunks: Buffer[] = [];
 
-        archive.on("data", (chunk: Buffer) => chunks.push(chunk));
-        archive.on("end", () => resolve(Buffer.concat(chunks)));
-        archive.on("error", (err) => reject(err));
+      archive.on("data", (chunk: Buffer) => chunks.push(chunk));
+      archive.on("end", () => resolve(Buffer.concat(chunks)));
+      archive.on("error", (err) => reject(err));
 
-        try {
-          for (const { name, buffer } of pngBuffers) {
-            archive.append(buffer, { name });
-          }
-          archive.finalize();
-        } catch (err) {
-          archive.destroy();
-          reject(err);
+      try {
+        for (const { name, buffer } of images) {
+          archive.append(buffer, { name });
         }
-      });
+        archive.finalize();
+      } catch (err) {
+        archive.destroy();
+        reject(err);
+      }
+    });
 
-      return new Response(new Uint8Array(zipBuffer), {
-        headers: {
-          "Content-Type": "application/zip",
-          "Content-Disposition": `attachment; filename="carousel-${safeName}.zip"`,
-        },
-      });
-    }
+    // Keep a local copy in the project's output/ directory so exports are
+    // reproducible artifacts of the project rather than one-off downloads.
+    await writeOutput(id, `carousel-${safeName}.zip`, zipBuffer).catch(() => {});
+
+    return new Response(new Uint8Array(zipBuffer), {
+      headers: {
+        "Content-Type": "application/zip",
+        "Content-Disposition": `attachment; filename="carousel-${safeName}.zip"`,
+      },
+    });
   } catch (error) {
     console.error("Export error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json(
-      { error: `Export failed: ${message}` },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: `Export failed: ${message}` }, { status: 500 });
   }
 }

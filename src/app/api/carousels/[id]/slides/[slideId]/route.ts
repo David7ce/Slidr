@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { updateSlide, deleteSlide } from "@/lib/carousels";
+import { validateSlideContent } from "@/lib/slides/schema";
 
 export async function PUT(
   request: Request,
@@ -8,7 +9,15 @@ export async function PUT(
   const { id, slideId } = await params;
   try {
     const body = await request.json();
-    const slide = await updateSlide(id, slideId, body);
+    const { notes, ...content } = body as Record<string, unknown>;
+    void notes;
+
+    const parsed = validateSlideContent(content);
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+
+    const slide = await updateSlide(id, slideId, parsed.data);
     if (!slide) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
