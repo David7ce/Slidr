@@ -1,4 +1,4 @@
-import type { Theme } from "@/types/theme";
+import type { Theme, BrandPlacement } from "@/types/theme";
 import { DIMENSIONS, type AspectRatio } from "@/types/carousel";
 
 /**
@@ -26,6 +26,8 @@ export interface RenderTokens {
     headingStack: string;
     bodyStack: string;
   };
+  /** Where the brand mark is rendered. */
+  brandPlacement: BrandPlacement;
   /** Base padding in px, already scaled. */
   pad: number;
   /** Base gap in px, already scaled. */
@@ -79,6 +81,7 @@ export function buildTokens(theme: Theme, ratio: AspectRatio): RenderTokens {
       headingStack: `'${theme.fonts.heading}', ${headingFallback}`,
       bodyStack: `'${theme.fonts.body}', ${bodyFallback}`,
     },
+    brandPlacement: theme.brandPlacement ?? "footer",
     pad: s(80),
     gap: s(28),
     sizes: {

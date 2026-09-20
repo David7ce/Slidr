@@ -103,4 +103,48 @@ describe("theme presets", () => {
     expect(t.palette.background).toBe("#000000");
     expect(t.designRules).toEqual([]);
   });
+
+  it("defaults brand placement to footer", () => {
+    const t = parseDesignMd(
+      "test",
+      `# Design System: Test
+> Category: General
+> A test.
+## 6. Design Rules
+- One rule
+`
+    );
+    expect(t.brandPlacement).toBe("footer");
+  });
+
+  it.each(["corner", "watermark", "none"] as const)(
+    "parses brand placement %s",
+    (placement) => {
+      const t = parseDesignMd(
+        "test",
+        `# Design System: Test
+> Category: General
+> A test.
+> Brand Placement: ${placement}
+## 6. Design Rules
+- One rule
+`
+      );
+      expect(t.brandPlacement).toBe(placement);
+    }
+  );
+
+  it("falls back to footer for an unknown brand placement", () => {
+    const t = parseDesignMd(
+      "test",
+      `# Design System: Test
+> Category: General
+> A test.
+> Brand Placement: sideways
+## 6. Design Rules
+- One rule
+`
+    );
+    expect(t.brandPlacement).toBe("footer");
+  });
 });

@@ -44,11 +44,26 @@ export function shell(inner: string, opts: ShellOptions): string {
       ? `<span>${esc(brand.name)}</span>`
       : "";
 
+  const placement = t.brandPlacement ?? "footer";
+
+  // The footer always carries the slide counter; the brand joins it only in
+  // the default "footer" placement.
   const footer = `
     <div style="display:flex; align-items:center; justify-content:space-between; gap:${t.gap}px; font-family:${t.fonts.bodyStack}; font-size:${t.sizes.small}px; color:${t.colors.text}; opacity:0.45; letter-spacing:0.08em; text-transform:uppercase;">
-      <span style="display:flex; align-items:center; min-width:0;">${brandMark}</span>
+      <span style="display:flex; align-items:center; min-width:0;">${placement === "footer" ? brandMark : ""}</span>
       <span style="flex-shrink:0;">${String(index).padStart(2, "0")} / ${String(total).padStart(2, "0")}</span>
     </div>`;
+
+  // Non-footer placements render the brand as an absolutely-positioned layer
+  // so it never participates in the flex layout.
+  const brandLayer =
+    placement !== "footer" && brandMark
+      ? placement === "corner"
+        ? `<div style="position:absolute; top:${t.pad}px; left:${t.pad}px; z-index:2; font-family:${t.fonts.bodyStack}; font-size:${t.sizes.small}px; color:${t.colors.text}; opacity:0.6; letter-spacing:0.08em; text-transform:uppercase;">${brandMark}</div>`
+        : placement === "watermark"
+          ? `<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; z-index:0; pointer-events:none; font-family:${t.fonts.headingStack}; font-size:${Math.round(t.sizes.hook * 1.6)}px; font-weight:800; color:${t.colors.text}; opacity:0.06; letter-spacing:-0.02em; white-space:nowrap; overflow:hidden;">${brandMark}</div>`
+          : ""
+      : "";
 
   const justify = center ? "center" : "flex-start";
 
@@ -66,6 +81,7 @@ export function shell(inner: string, opts: ShellOptions): string {
     box-sizing:border-box;
     overflow:hidden;
   ">
+    ${brandLayer}
     <div style="
       flex:1;
       display:flex;
@@ -73,6 +89,8 @@ export function shell(inner: string, opts: ShellOptions): string {
       justify-content:${justify};
       gap:${t.gap}px;
       min-height:0;
+      position:relative;
+      z-index:1;
     ">
       ${inner}
     </div>

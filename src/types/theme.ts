@@ -44,6 +44,9 @@ export interface ThemeMotion {
   duration: string;
 }
 
+/** Where the brand mark is rendered on each slide. */
+export type BrandPlacement = "footer" | "corner" | "watermark" | "none";
+
 export interface Theme {
   id: string;
   name: string;
@@ -61,4 +64,12 @@ export interface Theme {
    * z-index layering, creating 3D depth (the 2026 viral carousel trend).
    */
   depthLayering?: boolean;
+  /**
+   * Where the brand mark appears on each slide. Defaults to "footer".
+   * - `footer` — bottom bar alongside the slide counter (current behaviour)
+   * - `corner` — a small mark pinned to the top-left corner
+   * - `watermark` — a large, low-opacity mark behind the content
+   * - `none` — no brand mark
+   */
+  brandPlacement?: BrandPlacement;
 }

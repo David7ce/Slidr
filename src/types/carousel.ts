@@ -170,8 +170,6 @@ export interface Carousel {
   slides: Slide[];
   caption?: string;
   hashtags?: string[];
-  isTemplate: boolean;
-  tags: string[];
   themeId?: string | null;
   createdAt: string;
   updatedAt: string;

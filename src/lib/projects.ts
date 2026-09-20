@@ -132,7 +132,7 @@ export async function listCarousels(): Promise<Carousel[]> {
 
   const carousels = await Promise.all(entries.map((id) => readCarousel(id)));
   return carousels
-    .filter((c): c is Carousel => c !== null && !c.isTemplate)
+    .filter((c): c is Carousel => c !== null)
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
@@ -146,8 +146,6 @@ export async function createCarousel(
     name,
     aspectRatio,
     slides: [],
-    isTemplate: false,
-    tags: [],
     themeId,
     createdAt: now(),
     updatedAt: now(),
@@ -162,7 +160,7 @@ export async function createCarousel(
 export async function updateCarousel(
   id: string,
   updates: Partial<
-    Pick<Carousel, "name" | "aspectRatio" | "tags" | "caption" | "hashtags" | "themeId">
+    Pick<Carousel, "name" | "aspectRatio" | "caption" | "hashtags" | "themeId">
   >
 ): Promise<Carousel | null> {
   await mutate<Carousel>(id, (c) => {
@@ -188,7 +186,6 @@ export async function duplicateCarousel(id: string): Promise<Carousel | null> {
     id: generateId(),
     name: `${source.name} (copy)`,
     slides: source.slides.map((s) => ({ ...s, id: generateId() })),
-    isTemplate: false,
     createdAt: now(),
     updatedAt: now(),
   };

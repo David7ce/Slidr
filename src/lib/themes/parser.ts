@@ -1,6 +1,6 @@
 import { readFile } from "fs/promises";
 import path from "path";
-import type { Theme, ThemePalette, ThemeFonts, ThemeSpacing, ThemeMotion, ThemeCategory } from "@/types/theme";
+import type { Theme, ThemePalette, ThemeFonts, ThemeSpacing, ThemeMotion, ThemeCategory, BrandPlacement } from "@/types/theme";
 
 const PRESETS_DIR = path.resolve(process.cwd(), "src/lib/themes/presets");
 const themeCache = new Map<string, Theme>();
@@ -63,6 +63,9 @@ export function parseDesignMd(id: string, content: string): Theme {
     ? /enabled|true|yes|on/i.test(depthLayeringMatch[1].trim())
     : false;
 
+  // Parse "Brand Placement: <mode>" from front-matter. Defaults to "footer".
+  const brandPlacement = parseBrandPlacement(content);
+
   // Parse hex colors — primary, secondary, accent, background, surface, text
   const palette = parsePalette(content);
 
@@ -90,7 +93,18 @@ export function parseDesignMd(id: string, content: string): Theme {
     designRules,
     sourceInspiration,
     depthLayering,
+    brandPlacement,
   };
+}
+
+/** Parse the "Brand Placement:" front-matter directive into a BrandPlacement. */
+function parseBrandPlacement(content: string): BrandPlacement {
+  const match = content.match(/^>\s*Brand Placement:\s*([^\n]+)$/im);
+  if (!match) return "footer";
+  const value = match[1].trim().toLowerCase();
+  return value === "corner" || value === "watermark" || value === "none"
+    ? value
+    : "footer";
 }
 
 function parsePalette(content: string): ThemePalette {

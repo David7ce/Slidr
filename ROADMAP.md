@@ -124,8 +124,8 @@ The editor is no longer AI-only. A user can fix a typo without asking the model.
 
 ### 3. Remaining loose ends
 
-- [ ] `isTemplate` / `tags` on `Carousel` are vestigial
-- [ ] Brand rendering uses a plain name/logo footer. Consider whether themes should control brand placement (corner, watermark-style, none)
+- [x] `isTemplate` / `tags` on `Carousel` are vestigial (removed)
+- [x] Brand rendering uses a plain name/logo footer. Consider whether themes should control brand placement (corner, watermark-style, none) — added `brandPlacement` (`footer` | `corner` | `watermark` | `none`), parsed from a `> Brand Placement:` front-matter directive and honoured by the renderer's `shell()`
 
 ### 4. Quality
 

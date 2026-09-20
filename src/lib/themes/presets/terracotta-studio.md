@@ -2,6 +2,7 @@
 
 > Category: Brutalist & Y2K
 > Warm terracotta, cream, and a chunky display face — a sun-baked studio poster. Bold shapes, hard shadows, and confident type.
+> Brand Placement: none
 
 Source inspiration: Original design. Clean-room: no third-party design assets.
 

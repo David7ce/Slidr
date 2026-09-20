@@ -2,6 +2,7 @@
 
 > Category: Editorial & Magazine
 > Sun-bleached paper, a humanist serif, and a restrained sea-glass palette — for ideas that feel calm, considered, and unhurried.
+> Brand Placement: watermark
 
 Source inspiration: Original design. Clean-room: no third-party design assets.
 

@@ -2,6 +2,7 @@
 
 > Category: Agentic
 > Phosphor green on near-black — a terminal that never sleeps. Monospace-first, scanlines, and a single amber alert. For ideas that feel like code.
+> Brand Placement: corner
 
 Source inspiration: Original design. Clean-room: no third-party design assets.
 
