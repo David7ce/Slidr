@@ -132,7 +132,7 @@ The editor is no longer AI-only. A user can fix a typo without asking the model.
 - [ ] Visual review of all 9 types × 8 aspect ratios (only `ig-4:5` has been eyeballed)
 - [x] Portrait/landscape tuning — `computeScale` now scales by the binding (narrower) dimension instead of area, so `li-16:9` and `ig-9:16` no longer overflow their constrained axis
 - [x] Accessibility: colour-contrast checks against theme palettes — added `src/lib/render/contrast.ts` (WCAG AA) + tests; fixed 4 theme accents to pass
-- [ ] Fitting is heuristic: `fit.ts` estimates glyph widths. Verify against real content and tune the ratios if output looks too small
+- [x] Fitting is heuristic: `fit.ts` estimates glyph widths. Calibrated against real browser metrics (`scripts/calibrate-fit.mts`) and made theme-aware — `fitHeading`/`fitBody` now take the theme's font and use its measured glyph ratio
 
 ---
 

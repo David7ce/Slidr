@@ -49,7 +49,8 @@ export function renderCover(slide: CoverSlide, ctx: TemplateContext): string {
     t.sizes.hook,
     box.width,
     Math.max(t.sizes.hook, box.height - reserved),
-    1.02
+    1.02,
+    t.fonts.heading
   );
 
   const inner = `
@@ -77,10 +78,10 @@ export function renderText(slide: TextSlide, ctx: TemplateContext): string {
 
   // Heading and body share the box; give the heading its natural size and let
   // the body shrink into whatever remains.
-  const headingSize = fitHeading(slide.title, t.sizes.h1, box.width, box.height * 0.4);
+  const headingSize = fitHeading(slide.title, t.sizes.h1, box.width, box.height * 0.4, 1.08, t.fonts.heading);
   const headingHeight = headingSize * 1.08 + t.gap * 2;
   const bodySize = slide.body
-    ? fitBody(slide.body, t.sizes.h2, box.width * 0.92, box.height - headingHeight, 1.5)
+    ? fitBody(slide.body, t.sizes.h2, box.width * 0.92, box.height - headingHeight, 1.5, t.fonts.body)
     : t.sizes.h2;
 
   const inner = `
@@ -290,7 +291,8 @@ export function renderQuote(slide: QuoteSlide, ctx: TemplateContext): string {
     t.sizes.h1,
     box.width * 0.92,
     Math.max(t.sizes.h1, box.height - reserved),
-    1.25
+    1.25,
+    t.fonts.heading
   );
 
   const inner = `
@@ -323,10 +325,11 @@ export function renderConclusion(slide: ConclusionSlide, ctx: TemplateContext): 
     t.sizes.hook * 0.72,
     box.width,
     Math.max(t.sizes.h1, box.height - reserved),
-    1.08
+    1.08,
+    t.fonts.heading
   );
   const bodySize = slide.body
-    ? fitBody(slide.body, t.sizes.h2, box.width * 0.88, box.height - reserved - titleSize * 1.08, 1.45)
+    ? fitBody(slide.body, t.sizes.h2, box.width * 0.88, box.height - reserved - titleSize * 1.08, 1.45, t.fonts.body)
     : t.sizes.h2;
 
   const inner = `

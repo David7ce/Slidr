@@ -1,4 +1,4 @@
-import { estimateLines, estimateHeight, fitHeading, fitBody, fitFontSize } from "@/lib/render/fit";
+import { estimateLines, estimateHeight, fitHeading, fitBody, fitFontSize, headingGlyphRatio, bodyGlyphRatio } from "@/lib/render/fit";
 
 /**
  * Text fitting tests.
@@ -106,5 +106,30 @@ describe("fitHeading / fitBody", () => {
       0.5
     );
     expect(many).toBeGreaterThan(one);
+  });
+});
+
+describe("font-aware glyph ratios", () => {
+  it("returns a known ratio for a measured font", () => {
+    expect(headingGlyphRatio("Inter")).toBeGreaterThan(0);
+    expect(bodyGlyphRatio("Inter")).toBeGreaterThan(0);
+  });
+
+  it("falls back to the conservative default for unknown fonts", () => {
+    expect(headingGlyphRatio("Comic Sans")).toBe(0.54);
+    expect(bodyGlyphRatio("Comic Sans")).toBe(0.5);
+  });
+
+  it("keeps a narrow font's ratio below the wide default", () => {
+    // JetBrains Mono is narrower than the generic bold-sans default, so its
+    // ratio must be lower (allowing larger text without clipping).
+    expect(headingGlyphRatio("JetBrains Mono")).toBeLessThan(headingGlyphRatio("Inter"));
+  });
+
+  it("fits a narrow font to a larger size than a wide one", () => {
+    const text = "A moderately long headline that wraps across a couple of lines";
+    const narrow = fitHeading(text, 100, 900, 300, 1.08, "JetBrains Mono");
+    const wide = fitHeading(text, 100, 900, 300, 1.08, "Archivo Black");
+    expect(narrow).toBeGreaterThanOrEqual(wide);
   });
 });

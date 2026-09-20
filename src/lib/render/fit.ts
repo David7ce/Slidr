@@ -15,6 +15,43 @@ const HEADING_GLYPH_RATIO = 0.54;
 /** Average glyph width as a fraction of font size, for regular body text. */
 const BODY_GLYPH_RATIO = 0.5;
 
+/**
+ * Measured average glyph width (as a fraction of font size) for the fonts the
+ * themes use. Calibrated with scripts/calibrate-fit.mts against real browser
+ * metrics. A small safety margin is added so text errs toward fitting.
+ *
+ * Unknown fonts fall back to the conservative defaults above.
+ */
+const HEADING_RATIOS: Record<string, number> = {
+  Inter: 0.5,
+  "Space Grotesk": 0.49,
+  "JetBrains Mono": 0.49,
+  "IBM Plex Mono": 0.46,
+  Fraunces: 0.49,
+  "Archivo Black": 0.56,
+  Archivo: 0.46,
+  "Playfair Display": 0.5,
+  "Source Serif 4": 0.5,
+  Satoshi: 0.49,
+};
+
+const BODY_RATIOS: Record<string, number> = {
+  Inter: 0.48,
+  "IBM Plex Mono": 0.46,
+  Archivo: 0.46,
+  "Source Serif 4": 0.48,
+};
+
+/** Glyph ratio for a heading font, falling back to the conservative default. */
+export function headingGlyphRatio(font: string): number {
+  return HEADING_RATIOS[font] ?? HEADING_GLYPH_RATIO;
+}
+
+/** Glyph ratio for a body font, falling back to the conservative default. */
+export function bodyGlyphRatio(font: string): number {
+  return BODY_RATIOS[font] ?? BODY_GLYPH_RATIO;
+}
+
 export interface FitOptions {
   /** Font size to start from. */
   baseSize: number;
@@ -99,7 +136,8 @@ export function fitHeading(
   baseSize: number,
   maxWidth: number,
   maxHeight: number,
-  lineHeight = 1.08
+  lineHeight = 1.08,
+  font?: string
 ): number {
   return fitFontSize(text, {
     baseSize,
@@ -107,7 +145,7 @@ export function fitHeading(
     maxWidth,
     maxHeight,
     lineHeight,
-    glyphRatio: HEADING_GLYPH_RATIO,
+    glyphRatio: headingGlyphRatio(font ?? ""),
   });
 }
 
@@ -117,7 +155,8 @@ export function fitBody(
   baseSize: number,
   maxWidth: number,
   maxHeight: number,
-  lineHeight = 1.5
+  lineHeight = 1.5,
+  font?: string
 ): number {
   return fitFontSize(text, {
     baseSize,
@@ -125,6 +164,6 @@ export function fitBody(
     maxWidth,
     maxHeight,
     lineHeight,
-    glyphRatio: BODY_GLYPH_RATIO,
+    glyphRatio: bodyGlyphRatio(font ?? ""),
   });
 }
