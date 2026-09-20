@@ -20,13 +20,12 @@
     "url": "https://github.com/David7ce/Slidr"
   },
   "scripts": {
-    "setup": "node scripts/setup.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "stop": "lsof -ti:3000 | xargs kill -9 2>/dev/null || true",
     "test": "jest",
-    "doctor": "node scripts/doctor.mjs"
+    "doctor": "node scripts/doctor.mjs",
+    "demo": "tsx --tsconfig tsconfig.json scripts/demo-ai.mts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

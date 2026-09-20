@@ -12,6 +12,6 @@ Thank you for your interest in contributing to Slidr!
 
 ## Git & Commit Policy
 
-- **Author Attribution**: Commits must be attributed to the sole author: `tushar2704 <tushar.inseec@gmail.com>`. Do not include `Co-authored-by` trailers.
+- **Author Attribution**: Commits must be attributed to the sole author: `David7ce <david7ce@outlook.com>`. Do not include `Co-authored-by` trailers.
 - Use the imperative mood and be concise.
 - Always run `npm run build` and `npm run doctor` before committing.

@@ -87,7 +87,7 @@ does not mean it looks right.
 
 ## Git policy
 
-- Author: `tushar2704 <tushar.inseec@gmail.com>` — sole author, no co-author trailers
+- Author: `David7ce <david7ce@outlook.com>` — sole author, no co-author trailers
 - Commit messages: imperative mood, concise
 - Auto-commit after each phase
 

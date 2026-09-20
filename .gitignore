@@ -28,6 +28,7 @@
 /data/
 /public/uploads/
 /projects/
+/demo-output/
 
 # debug
 npm-debug.log*
