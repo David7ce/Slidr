@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Save, Loader2, Check, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Slide } from "@/types/carousel";
@@ -9,6 +9,8 @@ interface SlideEditorProps {
   carouselId: string;
   slide: Slide;
   onSaved: () => void;
+  /** Fired on every draft change so the parent can preview edits live. */
+  onChange?: (slide: Slide) => void;
 }
 
 /**
@@ -19,7 +21,7 @@ interface SlideEditorProps {
  * shows a value/label list. The API validates the payload with the same zod
  * schema the AI's tool calls go through.
  */
-export function SlideEditor({ carouselId, slide, onSaved }: SlideEditorProps) {
+export function SlideEditor({ carouselId, slide, onSaved, onChange }: SlideEditorProps) {
   const [draft, setDraft] = useState<Slide>(slide);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -37,6 +39,18 @@ export function SlideEditor({ carouselId, slide, onSaved }: SlideEditorProps) {
   }
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(slide);
+
+  // Push every draft change up to the parent for live preview. Skipped on the
+  // first render (when draft === slide) so opening the editor doesn't fire a
+  // spurious update.
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    onChange?.(draft);
+  }, [draft, onChange]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);

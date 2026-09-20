@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, use } from "react";
+import { useEffect, useState, useCallback, useRef, use, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Trash2, Grid3X3, Maximize2, Settings, Palette, MessageSquare, Pencil } from "lucide-react";
@@ -18,7 +18,7 @@ import { AddSlideDialog } from "@/components/editor/AddSlideDialog";
 import { FullscreenPreview } from "@/components/editor/FullscreenPreview";
 import { ThemeGallery } from "@/components/themes/ThemeGallery";
 import { LlmConfigModal } from "@/components/llm/LlmConfigModal";
-import type { Carousel, AspectRatio, SlideBrand } from "@/types/carousel";
+import type { Carousel, AspectRatio, SlideBrand, Slide } from "@/types/carousel";
 import type { LlmConfig } from "@/lib/llm/types";
 import type { Theme } from "@/types/theme";
 import type { BrandConfig } from "@/types/brand";
@@ -45,6 +45,9 @@ export default function CarouselEditorPage({ params }: PageProps) {
   const [showLlmConfig, setShowLlmConfig] = useState(false);
   const [llmConfig, setLlmConfig] = useState<LlmConfig | null>(null);
   const [brand, setBrand] = useState<BrandConfig | null>(null);
+  // Optimistic slide edits: while the user types in the editor, the preview
+  // reflects the draft immediately instead of waiting for the save round-trip.
+  const [draftSlide, setDraftSlide] = useState<Slide | null>(null);
 
   const [confirmState, setConfirmState] = useState<{
     open: boolean;
@@ -208,6 +211,18 @@ export default function CarouselEditorPage({ params }: PageProps) {
     setTimeout(() => chatInputRef.current?.focus(), 100);
   }, []);
 
+  // Live preview: while the user types, the draft overrides the saved slide in
+  // the preview and filmstrip. Cleared when the editor closes or the slide
+  // changes, so a stale draft never lingers.
+  const handleEditorChange = useCallback((slide: Slide) => {
+    setDraftSlide(slide);
+  }, []);
+
+  const handleEditorClose = useCallback(() => {
+    setShowEditorPanel(false);
+    setDraftSlide(null);
+  }, []);
+
   const handleSaveLlmConfig = async (config: LlmConfig) => {
     await fetch("/api/llm-config", {
       method: "PUT",
@@ -243,6 +258,17 @@ export default function CarouselEditorPage({ params }: PageProps) {
         logoUrl: brand.logoPath ?? undefined,
       }
     : undefined;
+
+  // Overlay the in-progress draft onto the active slide so the preview and
+  // filmstrip reflect edits as the user types, before the save round-trip.
+  const previewSlides = useMemo(() => {
+    if (!draftSlide) return carousel.slides;
+    const idx = carousel.slides.findIndex((s) => s.id === draftSlide.id);
+    if (idx === -1) return carousel.slides;
+    const next = [...carousel.slides];
+    next[idx] = draftSlide;
+    return next;
+  }, [carousel.slides, draftSlide]);
 
   return (
     <div className="h-full flex flex-col">
@@ -349,6 +375,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
                 carouselId={id}
                 slide={carousel.slides[activeSlide]}
                 onSaved={fetchCarousel}
+                onChange={handleEditorChange}
               />
             </div>
           ) : (
@@ -396,7 +423,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
             <Button
               variant={showEditorPanel ? "outline" : "ghost"}
               size="sm"
-              onClick={() => setShowEditorPanel(!showEditorPanel)}
+              onClick={() => (showEditorPanel ? handleEditorClose() : setShowEditorPanel(true))}
               className={showEditorPanel ? "border-accent text-accent" : "text-muted-foreground"}
               aria-label="Edit slide"
               title="Edit slide content"
@@ -439,7 +466,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
 
           {theme ? (
             <CarouselPreview
-              slides={carousel.slides}
+              slides={previewSlides}
               theme={theme}
               aspectRatio={carousel.aspectRatio}
               activeIndex={activeSlide}
@@ -469,7 +496,7 @@ export default function CarouselEditorPage({ params }: PageProps) {
 
           {theme && (
             <SlideFilmstrip
-              slides={carousel.slides}
+              slides={previewSlides}
               theme={theme}
               aspectRatio={carousel.aspectRatio}
               activeIndex={activeSlide}
