@@ -42,16 +42,25 @@ export interface RenderTokens {
   };
 }
 
-const BASE_AREA = 1080 * 1350;
+const BASE_WIDTH = 1080;
+const BASE_HEIGHT = 1350;
 
 /**
- * Scale typography proportionally to the slide area, clamped so extreme
- * ratios (16:9 landscape, 9:16 vertical) stay readable.
+ * Scale typography proportionally to the slide, clamped so extreme ratios
+ * (16:9 landscape, 9:16 vertical) stay readable.
+ *
+ * Text is scaled by the *binding* (narrower) dimension relative to the base
+ * 1080x1350, not by area. Area-based scaling over-sizes text on extreme
+ * ratios: a tall 9:16 slide has the same width as the base, so scaling by area
+ * makes text overflow the width; a wide 16:9 slide has less height, so area
+ * scaling overflows the height. Scaling by the binding dimension keeps text
+ * from clipping on either axis.
  */
 export function computeScale(ratio: AspectRatio): number {
   const { width, height } = DIMENSIONS[ratio];
-  const raw = Math.sqrt((width * height) / BASE_AREA);
-  return Math.max(0.78, Math.min(1.12, raw));
+  const widthRatio = width / BASE_WIDTH;
+  const heightRatio = height / BASE_HEIGHT;
+  return Math.max(0.7, Math.min(1.2, Math.min(widthRatio, heightRatio)));
 }
 
 export function buildTokens(theme: Theme, ratio: AspectRatio): RenderTokens {

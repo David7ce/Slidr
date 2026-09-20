@@ -130,7 +130,7 @@ The editor is no longer AI-only. A user can fix a typo without asking the model.
 ### 4. Quality
 
 - [ ] Visual review of all 9 types × 8 aspect ratios (only `ig-4:5` has been eyeballed)
-- [ ] Portrait/landscape tuning — `li-16:9` and `ig-9:16` use a single area-based scale factor and probably need per-type adjustment
+- [x] Portrait/landscape tuning — `computeScale` now scales by the binding (narrower) dimension instead of area, so `li-16:9` and `ig-9:16` no longer overflow their constrained axis
 - [x] Accessibility: colour-contrast checks against theme palettes — added `src/lib/render/contrast.ts` (WCAG AA) + tests; fixed 4 theme accents to pass
 - [ ] Fitting is heuristic: `fit.ts` estimates glyph widths. Verify against real content and tune the ratios if output looks too small
 

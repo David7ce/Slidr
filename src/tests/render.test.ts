@@ -1,4 +1,5 @@
 import { renderSlide } from "@/lib/render";
+import { computeScale } from "@/lib/render/tokens";
 import { validateSlideContent } from "@/lib/slides/schema";
 import { createBlankSlide } from "@/lib/slides/blank";
 import { parseDesignMd } from "@/lib/themes/parser";
@@ -227,5 +228,31 @@ describe("layout constraints", () => {
       return m ? Number(m[1]) : 0;
     };
     expect(sizeIn(at("li-16:9", slide))).toBeLessThanOrEqual(sizeIn(at("ig-9:16", slide)));
+  });
+});
+
+describe("computeScale", () => {
+  it("is 1 for the base 4:5 ratio", () => {
+    expect(computeScale("ig-4:5")).toBe(1);
+  });
+
+  it("scales by the binding dimension, not area", () => {
+    // 9:16 has the same width as the base but more height, so text must not
+    // grow (area-based scaling would push it to 1.12 and overflow the width).
+    expect(computeScale("ig-9:16")).toBe(1);
+    // 16:9 has less height than the base, so text must shrink.
+    expect(computeScale("li-16:9")).toBeLessThan(1);
+  });
+
+  it("shrinks square slides to fit their shorter height", () => {
+    expect(computeScale("ig-1:1")).toBeLessThan(1);
+    expect(computeScale("li-1:1")).toBeLessThan(1);
+  });
+
+  it("never exceeds the clamp", () => {
+    for (const ratio of Object.keys(DIMENSIONS) as AspectRatio[]) {
+      expect(computeScale(ratio)).toBeLessThanOrEqual(1.2);
+      expect(computeScale(ratio)).toBeGreaterThanOrEqual(0.7);
+    }
   });
 });
