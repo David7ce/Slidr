@@ -14,7 +14,7 @@ Source inspiration: Original design. Clean-room: no third-party design assets.
 - **Clay** (`#8a6a52`): CSS var `--palette-bg-secondary`. Used for: secondary text, captions.
 
 ### Accent
-- **Burnt Orange** (`#c4562a`): CSS var `--palette-accent`. Used for: rules, badges, CTA fills.
+- **Burnt Orange** (`#b04a24`): CSS var `--palette-accent`. Used for: rules, badges, CTA fills.
 
 ### Background
 - **Warm Sand** (`#faf5ed`): CSS var `--palette-bg-background`. Used for: default slide background.

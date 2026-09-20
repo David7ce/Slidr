@@ -12,7 +12,7 @@ Source inspiration: Original design. Clean-room: no third-party design assets.
 - **Terracotta** (`#c4552d`): CSS var `--palette-bg-primary`. Used for: headings, primary numbers, cover hook, filled blocks.
 
 ### Secondary & Accent
-- **Mustard** (`#e0a526`): CSS var `--palette-accent`. Used for: CTAs, badges, one focal element per slide.
+- **Mustard** (`#b45309`): CSS var `--palette-accent`. Used for: CTAs, badges, one focal element per slide.
 - **Clay** (`#a04a2f`): CSS var `--palette-bg-secondary`. Used for: secondary headings, filled panels.
 
 ### Surface & Background
@@ -24,7 +24,7 @@ Source inspiration: Original design. Clean-room: no third-party design assets.
 - **Taupe** (`#b8a48c`): Used for: hairlines, dividers, quiet rules.
 
 ### Gradient System
-`linear-gradient(135deg, #c4552d 0%, #e0a526 100%)` — a warm sunset wash for cover and conclusion backgrounds.
+`linear-gradient(135deg, #c4552d 0%, #b45309 100%)` — a warm sunset wash for cover and conclusion backgrounds.
 
 ## 3. Typography Rules
 

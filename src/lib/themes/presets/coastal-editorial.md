@@ -12,7 +12,7 @@ Source inspiration: Original design. Clean-room: no third-party design assets.
 - **Deep Teal** (`#0f4c5c`): CSS var `--palette-bg-primary`. Used for: headings, primary emphasis, cover hook.
 
 ### Secondary & Accent
-- **Sea Glass** (`#2a9d8f`): CSS var `--palette-accent`. Used for: rules, badges, CTA fills, one focal element per slide.
+- **Sea Glass** (`#1b6e64`): CSS var `--palette-accent`. Used for: rules, badges, CTA fills, one focal element per slide.
 - **Driftwood** (`#8a7a6a`): CSS var `--palette-bg-secondary`. Used for: secondary text, captions, metadata.
 
 ### Surface & Background

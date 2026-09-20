@@ -14,7 +14,7 @@ Source inspiration: 2024-2026 neo-brutalism wave (Gumroad, Linear, Vercel market
 - **Hot Pink** (`#ff0080`): CSS var `--palette-bg-secondary`. Used for: CTA fills, hot accent rectangles.
 
 ### Accent
-- **Sunshine Yellow** (`#fde047`): CSS var `--palette-accent`. Used for: stat highlights, swipe indicators, underline bars.
+- **Sunshine Yellow** (`#a16207`): CSS var `--palette-accent`. Used for: stat highlights, swipe indicators, underline bars.
 
 ### Background
 - **Pale Yellow** (`#fef9c3`): CSS var `--palette-bg-background`. Used for: default slide background.
@@ -26,8 +26,8 @@ Source inspiration: 2024-2026 neo-brutalism wave (Gumroad, Linear, Vercel market
 - **Pure Black** (`#000000`): CSS var `--palette-text`. Used for: all body text, headings, border strokes.
 
 ### Gradient System
-`linear-gradient(135deg, #fef9c3 0%, #fde047 100%)` — used for hero slides and CTA panels.
-`linear-gradient(135deg, #76ff03 0%, #fde047 100%)` — used for hook text gradient fills.
+`linear-gradient(135deg, #fef9c3 0%, #a16207 100%)` — used for hero slides and CTA panels.
+`linear-gradient(135deg, #76ff03 0%, #a16207 100%)` — used for hook text gradient fills.
 
 ## 3. Typography Rules
 
