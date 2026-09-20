@@ -3,8 +3,8 @@
 Status of the migration from *Slidr: AI writes slide HTML* to *Slidr: AI writes
 structured content, a deterministic renderer draws it*.
 
-Legend: **Pending** · **Deferred** (deliberately out of scope). Completed work
-is recorded in `docs/RELEASES.md`.
+Legend: **Done** · **Deferred** (deliberately out of scope). Completed work is
+recorded in `docs/RELEASES.md`.
 
 ---
 
@@ -20,15 +20,18 @@ The invariant everything depends on:
 
 ---
 
-## Pending
+## Done
 
-### 1. Theme authoring
+The migration is complete. All planned work has shipped:
 
-- [ ] Decide whether themes should tune per-slide-type layout, not just colour/type
-
-### 2. Quality
-
-- [ ] Visual review of all 9 types × 8 aspect ratios (only `ig-4:5` has been eyeballed)
+- **Editor** — direct content editing, add-slide UI, optimistic live preview.
+- **Themes** — 14 presets, theme-controlled brand placement, and a decision to
+  keep layout in the renderer's templates (themes tune the visual system via
+  design tokens).
+- **Loose ends** — vestigial `isTemplate`/`tags` removed.
+- **Quality** — WCAG AA contrast checks, portrait/landscape scale tuning,
+  theme-aware text fitting, and a full render matrix (`scripts/render-matrix.mts`)
+  for visual review.
 
 ---
 
@@ -43,6 +46,7 @@ Out of scope for the local-first carousel tool. Recorded so the decisions are ex
 - MCP / agent tooling
 - Community theme marketplace
 - Image generation and background removal
+- Per-slide-type layout overrides per theme (kept in the renderer's templates instead)
 
 ---
 

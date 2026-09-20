@@ -28,12 +28,18 @@ renderer gets a quality pass.
 - **Theme-aware text fitting** — `fitHeading`/`fitBody` now use the theme's
   font's measured glyph ratio (calibrated against real browser metrics via
   `scripts/calibrate-fit.mts`) instead of a single conservative constant.
+- **Full render matrix** (`scripts/render-matrix.mts`) — renders every slide
+  type × aspect ratio × theme into `/tmp/slidr-matrix/` for visual review.
 
 ### Changed
 
 - **`computeScale`** scales type by the binding (narrower) dimension instead of
   area, so `li-16:9` and `ig-9:16` no longer overflow their constrained axis.
 - **`Carousel`** dropped the vestigial `isTemplate` and `tags` fields.
+- **Theme layout decision** — themes tune the visual system via design tokens
+  (palette, fonts, spacing, motion, brand placement); the renderer's templates
+  remain the single source of layout truth. Per-slide-type overrides were
+  deliberately not added.
 
 ### Fixed
 
