@@ -120,10 +120,12 @@ reload, and the carousel updates.
 
 ## Themes
 
-Eight curated themes, each a `DESIGN.md` file in `src/lib/themes/presets/`:
+Fourteen curated themes, each a `DESIGN.md` file in `src/lib/themes/presets/`:
 
 `swiss-grid` · `editorial-mono` · `minimal-mono` · `paper-editorial` ·
-`midnight-neon` · `neo-brutalism-bold` · `gradient-mesh-aurora` · `tech-startup`
+`midnight-neon` · `neo-brutalism-bold` · `gradient-mesh-aurora` · `tech-startup` ·
+`blueprint-technical` · `scientific-journal` · `warm-print` ·
+`coastal-editorial` · `terminal-green` · `terracotta-studio`
 
 A theme defines the visual system — palette, fonts, spacing, motion. The AI
 selects a theme; it cannot invent one. Add your own by dropping a `DESIGN.md`

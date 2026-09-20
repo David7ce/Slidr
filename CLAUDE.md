@@ -41,9 +41,11 @@ slide type instead.
 
 ## Themes
 
-8 presets in `src/lib/themes/presets/`: `swiss-grid`, `editorial-mono`,
+14 presets in `src/lib/themes/presets/`: `swiss-grid`, `editorial-mono`,
 `minimal-mono`, `paper-editorial`, `midnight-neon`, `neo-brutalism-bold`,
-`gradient-mesh-aurora`, `tech-startup`.
+`gradient-mesh-aurora`, `tech-startup`, `blueprint-technical`,
+`scientific-journal`, `warm-print`, `coastal-editorial`, `terminal-green`,
+`terracotta-studio`.
 
 ## Sizes
 

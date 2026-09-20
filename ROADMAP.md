@@ -56,7 +56,9 @@ theme upload/community · MCP server · 120 of 128 theme presets.
 
 **8 themes kept:** `swiss-grid`, `editorial-mono`, `minimal-mono`,
 `paper-editorial`, `midnight-neon`, `neo-brutalism-bold`,
-`gradient-mesh-aurora`, `tech-startup`.
+`gradient-mesh-aurora`, `tech-startup`. Later expanded with
+`blueprint-technical`, `scientific-journal`, `warm-print`, and three
+clean-room originals: `coastal-editorial`, `terminal-green`, `terracotta-studio`.
 
 ### Licensing
 
@@ -116,8 +118,8 @@ The editor is no longer AI-only. A user can fix a typo without asking the model.
 
 ### 2. Theme authoring
 
-- [ ] Author 2–3 additional original themes (clean-room, per the licence note)
-- [ ] `designRules` parses to 0 rules for the current presets — either surface and use them in the renderer, or drop the field
+- [x] Author 2–3 additional original themes (clean-room, per the licence note) — `coastal-editorial`, `terminal-green`, `terracotta-studio`
+- [x] `designRules` parses to 0 rules for the current presets — either surface and use them in the renderer, or drop the field (resolved: the parser now reads rules; all 14 presets carry them)
 - [ ] Decide whether themes should tune per-slide-type layout, not just colour/type
 
 ### 3. Remaining loose ends
