@@ -9,6 +9,12 @@ const themeCache = new Map<string, Theme>();
  * Parse a DESIGN.md file (Open Design format) into a Theme object.
  */
 export function parseDesignMd(id: string, content: string): Theme {
+  // Normalise CRLF to LF. The theme files are checked out with CRLF on
+  // Windows, and several regexes anchor on `$`/`^` per line. Without this,
+  // `$` fails to match before a trailing `\r`, silently emptying fields like
+  // `atmosphere` (which is parsed line-by-line without the `m` flag).
+  content = content.replace(/\r\n/g, "\n");
+
   const nameMatch = content.match(/^#\s+Design System:\s*(.+)$/m);
   const name = nameMatch ? nameMatch[1].trim() : id;
 
@@ -37,8 +43,10 @@ export function parseDesignMd(id: string, content: string): Theme {
     : "General") as ThemeCategory;
 
   // Atmosphere = the first `>` line that is NOT "Category:" or "Depth Layering:"
+  // The lookahead must tolerate leading whitespace after `>` (e.g. "> Category:")
+  // so it does not match the Category line via `\s*` backtracking.
   const atmosphereLine = content.split("\n").find(
-    (line) => /^>\s*(?!Category:|Depth Layering:)(.+)$/.test(line)
+    (line) => /^>[ \t]*(?!\s*Category:|\s*Depth Layering:)(.+)$/.test(line)
   );
   const atmosphere = atmosphereLine
     ? atmosphereLine.replace(/^>\s*/, "").trim()
