@@ -23,15 +23,15 @@ The invariant everything depends on:
 
 ### Core pivot
 
-| Area | Change |
-|---|---|
-| Slide model | `Slide.html: string` replaced by a 9-variant discriminated union (`cover`, `text`, `comparison`, `statistic`, `timeline`, `process`, `diagram`, `quote`, `conclusion`) |
-| Validation | Every AI payload passes through zod (`src/lib/slides/schema.ts`) before touching storage; failures return a corrective message to the model |
-| Renderer | `src/lib/render/` — design tokens (`tokens.ts`), primitives (`primitives.ts`), 9 templates (`templates.ts`). The only place slide HTML is produced |
-| Shared contract | `wrapSlideHtml()` unchanged; preview and export both render from content, so the preview is pixel-identical to the export |
-| AI tools | `create_slide{html}` → `set_carousel`, `add_slide`, `update_slide`, `delete_slide`, `reorder_slides`, `set_caption`, `fetch_url` |
-| System prompt | Rewritten: the AI is a content strategist. Hard constraint — never emit HTML, CSS, or design values |
-| Export | PNG + JPG via Puppeteer/Sharp, driven by the renderer |
+| Area            | Change                                                                                                                                                                 |
+|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Slide model     | `Slide.html: string` replaced by a 9-variant discriminated union (`cover`, `text`, `comparison`, `statistic`, `timeline`, `process`, `diagram`, `quote`, `conclusion`) |
+| Validation      | Every AI payload passes through zod (`src/lib/slides/schema.ts`) before touching storage; failures return a corrective message to the model                            |
+| Renderer        | `src/lib/render/` — design tokens (`tokens.ts`), primitives (`primitives.ts`), 9 templates (`templates.ts`). The only place slide HTML is produced                     |
+| Shared contract | `wrapSlideHtml()` unchanged; preview and export both render from content, so the preview is pixel-identical to the export                                              |
+| AI tools        | `create_slide{html}` → `set_carousel`, `add_slide`, `update_slide`, `delete_slide`, `reorder_slides`, `set_caption`, `fetch_url`                                       |
+| System prompt   | Rewritten: the AI is a content strategist. Hard constraint — never emit HTML, CSS, or design values                                                                    |
+| Export          | PNG + JPG via Puppeteer/Sharp, driven by the renderer                                                                                                                  |
 
 ### Storage: `projects/`
 
@@ -107,12 +107,12 @@ Rewritten for the new architecture: `README.md`, `AGENTS.md`, `CLAUDE.md`,
 
 ### 1. Editor: direct content editing
 
-The editor is currently AI-only. A user cannot fix a typo without asking the model.
+The editor is no longer AI-only. A user can fix a typo without asking the model.
 
-- [ ] Per-slide structured content editor (fields per type, not raw HTML)
-- [ ] `PUT /api/carousels/[id]/slides/[slideId]` accepts and validates content
-- [ ] Add-slide UI with a type picker
-- [ ] Optimistic updates so edits feel instant
+- [x] Per-slide structured content editor (fields per type, not raw HTML)
+- [x] `PUT /api/carousels/[id]/slides/[slideId]` accepts and validates content
+- [x] Add-slide UI with a type picker
+- [x] Optimistic updates so edits feel instant (live preview while typing)
 
 ### 2. Theme authoring
 
