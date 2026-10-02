@@ -232,6 +232,20 @@ export default function CarouselEditorPage({ params }: PageProps) {
     await fetchLlmConfig();
   };
 
+  // Hooks must run on every render, so this sits above the early returns below.
+  // Overlay the in-progress draft onto the active slide so the preview and
+  // filmstrip reflect edits as the user types, before the save round-trip.
+  const slides = carousel?.slides;
+  const previewSlides = useMemo(() => {
+    if (!slides) return [];
+    if (!draftSlide) return slides;
+    const idx = slides.findIndex((s) => s.id === draftSlide.id);
+    if (idx === -1) return slides;
+    const next = [...slides];
+    next[idx] = draftSlide;
+    return next;
+  }, [slides, draftSlide]);
+
   if (notFound) {
     return (
       <div className="h-full flex flex-col items-center justify-center gap-4">
@@ -258,17 +272,6 @@ export default function CarouselEditorPage({ params }: PageProps) {
         logoUrl: brand.logoPath ?? undefined,
       }
     : undefined;
-
-  // Overlay the in-progress draft onto the active slide so the preview and
-  // filmstrip reflect edits as the user types, before the save round-trip.
-  const previewSlides = useMemo(() => {
-    if (!draftSlide) return carousel.slides;
-    const idx = carousel.slides.findIndex((s) => s.id === draftSlide.id);
-    if (idx === -1) return carousel.slides;
-    const next = [...carousel.slides];
-    next[idx] = draftSlide;
-    return next;
-  }, [carousel.slides, draftSlide]);
 
   return (
     <div className="h-full flex flex-col">
