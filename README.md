@@ -202,7 +202,7 @@ End-to-end check of storage → AI tools → export:
 pnpm exec tsx --tsconfig tsconfig.json scripts/verify-e2e.mts
 ```
 
-See [docs/ROADMAP.md](docs/ROADMAP.md) for pending work and
+See AgenticHub/projects/working/ROADMAP.md for pending work and
 [docs/RELEASES.md](docs/RELEASES.md) for what has shipped.
 
 ---
